@@ -336,86 +336,75 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
         addressSpace
       ]
     }
+    // All subnets defined inline — avoids AnotherOperationInProgress errors.
+    // Azure allows only one concurrent write per VNet; separate child subnet resources
+    // deployed in parallel will race and fail. Inline = single API call.
+    subnets: [
+      {
+        name: 'frontend'
+        properties: {
+          addressPrefix: '10.0.1.0/24'
+          networkSecurityGroup: { id: frontendNsg.id }
+        }
+      }
+      {
+        name: 'control'
+        properties: {
+          addressPrefix: '10.0.2.0/24'
+          networkSecurityGroup: { id: controlNsg.id }
+        }
+      }
+      {
+        name: 'data'
+        properties: {
+          addressPrefix: '10.0.3.0/24'
+          privateEndpointNetworkPolicies: 'Enabled'
+          networkSecurityGroup: { id: dataNsg.id }
+        }
+      }
+      {
+        name: 'secrets'
+        properties: {
+          addressPrefix: '10.0.4.0/24'
+          privateEndpointNetworkPolicies: 'Enabled'
+          networkSecurityGroup: { id: secretsNsg.id }
+        }
+      }
+      {
+        name: 'AzureBastionSubnet'
+        properties: {
+          addressPrefix: '10.0.5.0/27'
+          networkSecurityGroup: { id: bastionNsg.id }
+        }
+      }
+      {
+        name: 'privatelink'
+        properties: {
+          addressPrefix: '10.0.6.0/24'
+          privateEndpointNetworkPolicies: 'Enabled'
+          privateLinkServiceNetworkPolicies: 'Disabled'
+          networkSecurityGroup: { id: privateLinkNsg.id }
+        }
+      }
+    ]
   }
 }
 
-resource frontendSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
-  name: 'frontend'
-  parent: vnet
-  properties: {
-    addressPrefix: '10.0.1.0/24'
-    networkSecurityGroup: {
-      id: frontendNsg.id
-    }
-  }
-}
-
-resource controlSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
-  name: 'control'
-  parent: vnet
-  properties: {
-    addressPrefix: '10.0.2.0/24'
-    networkSecurityGroup: {
-      id: controlNsg.id
-    }
-  }
-}
-
-resource dataSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
-  name: 'data'
-  parent: vnet
-  properties: {
-    addressPrefix: '10.0.3.0/24'
-    privateEndpointNetworkPolicies: 'Enabled'
-    networkSecurityGroup: {
-      id: dataNsg.id
-    }
-  }
-}
-
-resource secretsSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
-  name: 'secrets'
-  parent: vnet
-  properties: {
-    addressPrefix: '10.0.4.0/24'
-    privateEndpointNetworkPolicies: 'Enabled'
-    networkSecurityGroup: {
-      id: secretsNsg.id
-    }
-  }
-}
-
-resource bastionSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
-  name: 'AzureBastionSubnet'
-  parent: vnet
-  properties: {
-    addressPrefix: '10.0.5.0/27'
-    networkSecurityGroup: {
-      id: bastionNsg.id
-    }
-  }
-}
-
-resource privateLinkSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
-  name: 'privatelink'
-  parent: vnet
-  properties: {
-    addressPrefix: '10.0.6.0/24'
-    privateEndpointNetworkPolicies: 'Enabled'
-    privateLinkServiceNetworkPolicies: 'Disabled'
-    networkSecurityGroup: {
-      id: privateLinkNsg.id
-    }
-  }
-}
+// Symbolic references to inline subnets for use in output
+var subnetFrontend   = vnet.properties.subnets[0].id
+var subnetControl    = vnet.properties.subnets[1].id
+var subnetData       = vnet.properties.subnets[2].id
+var subnetSecrets    = vnet.properties.subnets[3].id
+var subnetBastion    = vnet.properties.subnets[4].id
+var subnetPrivateLink = vnet.properties.subnets[5].id
 
 output vnetId string = vnet.id
 output vnetName string = vnet.name
 output subnetIds object = {
-  frontend: frontendSubnet.id
-  control: controlSubnet.id
-  data: dataSubnet.id
-  secrets: secretsSubnet.id
-  bastion: bastionSubnet.id
-  privatelink: privateLinkSubnet.id
+  frontend: subnetFrontend
+  control: subnetControl
+  data: subnetData
+  secrets: subnetSecrets
+  bastion: subnetBastion
+  privatelink: subnetPrivateLink
 }
