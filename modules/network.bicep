@@ -7,8 +7,29 @@ param location string
 @description('Tags applied to all taggable resources in this module.')
 param tags object
 
+@description('Address space for the virtual network, e.g. 10.0.0.0/16.')
+param vnetAddressPrefix string = '10.0.0.0/16'
+
+@description('Address prefix for the frontend subnet (VMSS + ILB). Must be within vnetAddressPrefix.')
+param subnetFrontendPrefix string = '10.0.1.0/24'
+
+@description('Address prefix for the control subnet (Controller VM). Must be within vnetAddressPrefix.')
+param subnetControlPrefix string = '10.0.2.0/24'
+
+@description('Address prefix for the data subnet (MySQL, Redis, Storage private endpoints). Must be within vnetAddressPrefix.')
+param subnetDataPrefix string = '10.0.3.0/24'
+
+@description('Address prefix for the secrets subnet (Key Vault private endpoint). Must be within vnetAddressPrefix.')
+#disable-next-line secure-secrets-in-params
+param subnetSecretsPrefix string = '10.0.4.0/24'
+
+@description('Address prefix for Azure Bastion subnet. Must be /27 or larger and within vnetAddressPrefix.')
+param subnetBastionPrefix string = '10.0.5.0/27'
+
+@description('Address prefix for the Private Link service subnet (Front Door origin). Must be within vnetAddressPrefix.')
+param subnetPrivateLinkPrefix string = '10.0.6.0/24'
+
 var vnetName = '${prefix}-vnet'
-var addressSpace = '10.0.0.0/16'
 
 resource frontendNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
   name: '${prefix}-frontend-nsg'
@@ -333,7 +354,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
   properties: {
     addressSpace: {
       addressPrefixes: [
-        addressSpace
+        vnetAddressPrefix
       ]
     }
     // All subnets defined inline — avoids AnotherOperationInProgress errors.
@@ -343,21 +364,21 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
       {
         name: 'frontend'
         properties: {
-          addressPrefix: '10.0.1.0/24'
+          addressPrefix: subnetFrontendPrefix
           networkSecurityGroup: { id: frontendNsg.id }
         }
       }
       {
         name: 'control'
         properties: {
-          addressPrefix: '10.0.2.0/24'
+          addressPrefix: subnetControlPrefix
           networkSecurityGroup: { id: controlNsg.id }
         }
       }
       {
         name: 'data'
         properties: {
-          addressPrefix: '10.0.3.0/24'
+          addressPrefix: subnetDataPrefix
           privateEndpointNetworkPolicies: 'Enabled'
           networkSecurityGroup: { id: dataNsg.id }
         }
@@ -365,7 +386,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
       {
         name: 'secrets'
         properties: {
-          addressPrefix: '10.0.4.0/24'
+          addressPrefix: subnetSecretsPrefix
           privateEndpointNetworkPolicies: 'Enabled'
           networkSecurityGroup: { id: secretsNsg.id }
         }
@@ -373,14 +394,14 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
       {
         name: 'AzureBastionSubnet'
         properties: {
-          addressPrefix: '10.0.5.0/27'
+          addressPrefix: subnetBastionPrefix
           networkSecurityGroup: { id: bastionNsg.id }
         }
       }
       {
         name: 'privatelink'
         properties: {
-          addressPrefix: '10.0.6.0/24'
+          addressPrefix: subnetPrivateLinkPrefix
           privateEndpointNetworkPolicies: 'Enabled'
           privateLinkServiceNetworkPolicies: 'Disabled'
           networkSecurityGroup: { id: privateLinkNsg.id }

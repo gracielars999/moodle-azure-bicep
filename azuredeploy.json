@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "6888998055318067744"
+      "templateHash": "2787027284840999859"
     }
   },
   "parameters": {
@@ -60,6 +60,55 @@
       "metadata": {
         "description": "Name of the Moodle database to create in MySQL."
       }
+    },
+    "vnetAddressPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.0.0/16",
+      "metadata": {
+        "description": "Address space for the virtual network, e.g. 10.0.0.0/16."
+      }
+    },
+    "subnetFrontendPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.1.0/24",
+      "metadata": {
+        "description": "Address prefix for the frontend subnet (VMSS + ILB)."
+      }
+    },
+    "subnetControlPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.2.0/24",
+      "metadata": {
+        "description": "Address prefix for the control subnet (Controller VM)."
+      }
+    },
+    "subnetDataPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.3.0/24",
+      "metadata": {
+        "description": "Address prefix for the data subnet (private endpoints for MySQL, Redis, Storage)."
+      }
+    },
+    "subnetSecretsPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.4.0/24",
+      "metadata": {
+        "description": "Address prefix for the secrets subnet (Key Vault private endpoint)."
+      }
+    },
+    "subnetBastionPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.5.0/27",
+      "metadata": {
+        "description": "Address prefix for the Azure Bastion subnet. Must be /27 or larger."
+      }
+    },
+    "subnetPrivateLinkPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.6.0/24",
+      "metadata": {
+        "description": "Address prefix for the Private Link service subnet (Front Door origin)."
+      }
     }
   },
   "variables": {
@@ -88,6 +137,27 @@
           },
           "tags": {
             "value": "[variables('tags')]"
+          },
+          "vnetAddressPrefix": {
+            "value": "[parameters('vnetAddressPrefix')]"
+          },
+          "subnetFrontendPrefix": {
+            "value": "[parameters('subnetFrontendPrefix')]"
+          },
+          "subnetControlPrefix": {
+            "value": "[parameters('subnetControlPrefix')]"
+          },
+          "subnetDataPrefix": {
+            "value": "[parameters('subnetDataPrefix')]"
+          },
+          "subnetSecretsPrefix": {
+            "value": "[parameters('subnetSecretsPrefix')]"
+          },
+          "subnetBastionPrefix": {
+            "value": "[parameters('subnetBastionPrefix')]"
+          },
+          "subnetPrivateLinkPrefix": {
+            "value": "[parameters('subnetPrivateLinkPrefix')]"
           }
         },
         "template": {
@@ -97,7 +167,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "11875090789226940834"
+              "templateHash": "6298100031635922130"
             }
           },
           "parameters": {
@@ -118,11 +188,59 @@
               "metadata": {
                 "description": "Tags applied to all taggable resources in this module."
               }
+            },
+            "vnetAddressPrefix": {
+              "type": "string",
+              "defaultValue": "10.0.0.0/16",
+              "metadata": {
+                "description": "Address space for the virtual network, e.g. 10.0.0.0/16."
+              }
+            },
+            "subnetFrontendPrefix": {
+              "type": "string",
+              "defaultValue": "10.0.1.0/24",
+              "metadata": {
+                "description": "Address prefix for the frontend subnet (VMSS + ILB). Must be within vnetAddressPrefix."
+              }
+            },
+            "subnetControlPrefix": {
+              "type": "string",
+              "defaultValue": "10.0.2.0/24",
+              "metadata": {
+                "description": "Address prefix for the control subnet (Controller VM). Must be within vnetAddressPrefix."
+              }
+            },
+            "subnetDataPrefix": {
+              "type": "string",
+              "defaultValue": "10.0.3.0/24",
+              "metadata": {
+                "description": "Address prefix for the data subnet (MySQL, Redis, Storage private endpoints). Must be within vnetAddressPrefix."
+              }
+            },
+            "subnetSecretsPrefix": {
+              "type": "string",
+              "defaultValue": "10.0.4.0/24",
+              "metadata": {
+                "description": "Address prefix for the secrets subnet (Key Vault private endpoint). Must be within vnetAddressPrefix."
+              }
+            },
+            "subnetBastionPrefix": {
+              "type": "string",
+              "defaultValue": "10.0.5.0/27",
+              "metadata": {
+                "description": "Address prefix for Azure Bastion subnet. Must be /27 or larger and within vnetAddressPrefix."
+              }
+            },
+            "subnetPrivateLinkPrefix": {
+              "type": "string",
+              "defaultValue": "10.0.6.0/24",
+              "metadata": {
+                "description": "Address prefix for the Private Link service subnet (Front Door origin). Must be within vnetAddressPrefix."
+              }
             }
           },
           "variables": {
-            "vnetName": "[format('{0}-vnet', parameters('prefix'))]",
-            "addressSpace": "10.0.0.0/16"
+            "vnetName": "[format('{0}-vnet', parameters('prefix'))]"
           },
           "resources": [
             {
@@ -456,14 +574,14 @@
               "properties": {
                 "addressSpace": {
                   "addressPrefixes": [
-                    "[variables('addressSpace')]"
+                    "[parameters('vnetAddressPrefix')]"
                   ]
                 },
                 "subnets": [
                   {
                     "name": "frontend",
                     "properties": {
-                      "addressPrefix": "10.0.1.0/24",
+                      "addressPrefix": "[parameters('subnetFrontendPrefix')]",
                       "networkSecurityGroup": {
                         "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-frontend-nsg', parameters('prefix')))]"
                       }
@@ -472,7 +590,7 @@
                   {
                     "name": "control",
                     "properties": {
-                      "addressPrefix": "10.0.2.0/24",
+                      "addressPrefix": "[parameters('subnetControlPrefix')]",
                       "networkSecurityGroup": {
                         "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-control-nsg', parameters('prefix')))]"
                       }
@@ -481,7 +599,7 @@
                   {
                     "name": "data",
                     "properties": {
-                      "addressPrefix": "10.0.3.0/24",
+                      "addressPrefix": "[parameters('subnetDataPrefix')]",
                       "privateEndpointNetworkPolicies": "Enabled",
                       "networkSecurityGroup": {
                         "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-data-nsg', parameters('prefix')))]"
@@ -491,7 +609,7 @@
                   {
                     "name": "secrets",
                     "properties": {
-                      "addressPrefix": "10.0.4.0/24",
+                      "addressPrefix": "[parameters('subnetSecretsPrefix')]",
                       "privateEndpointNetworkPolicies": "Enabled",
                       "networkSecurityGroup": {
                         "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-secrets-nsg', parameters('prefix')))]"
@@ -501,7 +619,7 @@
                   {
                     "name": "AzureBastionSubnet",
                     "properties": {
-                      "addressPrefix": "10.0.5.0/27",
+                      "addressPrefix": "[parameters('subnetBastionPrefix')]",
                       "networkSecurityGroup": {
                         "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-bastion-nsg', parameters('prefix')))]"
                       }
@@ -510,7 +628,7 @@
                   {
                     "name": "privatelink",
                     "properties": {
-                      "addressPrefix": "10.0.6.0/24",
+                      "addressPrefix": "[parameters('subnetPrivateLinkPrefix')]",
                       "privateEndpointNetworkPolicies": "Enabled",
                       "privateLinkServiceNetworkPolicies": "Disabled",
                       "networkSecurityGroup": {
