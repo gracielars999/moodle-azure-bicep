@@ -165,13 +165,30 @@ Esto conecta Front Door Premium con el Internal Load Balancer de forma privada.
    - **DB user/pass**: los que definiste en los parámetros
 
 ### 4. Sincronizar código a nodos VMSS
-Después de completar el wizard, sincroniza el `config.php` generado a todos los nodos:
+
+**No se requiere sync manual.** Cada nodo VMSS tiene una tarea programada que hace el pull automáticamente cada 5 minutos desde Azure Files:
+
+```
+Azure Files Y:\html          ← Fuente de verdad (controller escribe aquí)
+       ↓ Robocopy /MIR        ← Pull automático cada 5 min en cada nodo
+C:\moodle\html               ← Disco local SSD (IIS sirve desde aquí)
+```
+
+Este patrón es equivalente al que usa el repositorio oficial `Azure/Moodle` en Linux con `rsync`. Ventajas:
+- ✅ Sin IPs hardcodeadas — funciona con cualquier número de nodos
+- ✅ Nodos nuevos se auto-sincronizan al arrancar
+- ✅ IIS sirve desde disco local (mejor performance que Azure Files directo)
+- ✅ Azure Files es la única fuente de verdad
+
+Para desplegar una actualización de Moodle o un plugin:
 ```powershell
-# Desde la VM Controladora
-$vmssNodes = @("10.0.1.4", "10.0.1.5")  # IPs de los nodos
-foreach ($node in $vmssNodes) {
-    robocopy C:\moodle\html \\$node\c$\moodle\html config.php
-}
+# Desde la VM Controladora (via Bastion)
+# 1. Copiar los archivos nuevos a Azure Files (fuente de verdad)
+Copy-Item -Path C:\updates\* -Destination Y:\html -Recurse -Force
+
+# 2. Los nodos VMSS lo reciben automáticamente en max 5 minutos
+# (o forzar sync inmediato reiniciando la tarea)
+Invoke-Command -ComputerName <nodo> { Start-ScheduledTask 'Moodle Code Sync' }
 ```
 
 ### 5. Configurar Redis en Moodle

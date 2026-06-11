@@ -16,6 +16,7 @@ param dataSubnetId string
 var storageAccountName = take(replace(toLower('${prefix}st${uniqueString(resourceGroup().id)}'), '-', ''), 24)
 var privateDnsZoneName = 'privatelink.file.core.windows.net'
 var fileShareName = 'moodledata'
+var htmlShareName = 'moodlehtml'
 
 resource privateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
   name: privateDnsZoneName
@@ -68,6 +69,16 @@ resource moodleShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2023
   }
 }
 
+resource htmlShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-05-01' = {
+  parent: fileService
+  name: htmlShareName
+  properties: {
+    accessTier: 'Premium'
+    enabledProtocols: 'SMB'
+    shareQuota: 128
+  }
+}
+
 resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-01-01' = {
   name: '${storage.name}-pep'
   location: location
@@ -108,4 +119,5 @@ resource dnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2
 output storageAccountId string = storage.id
 output storageAccountName string = storage.name
 output fileShareName string = moodleShare.name
+output htmlShareName string = htmlShare.name
 output primaryFileKey string = storage.listKeys().keys[0].value

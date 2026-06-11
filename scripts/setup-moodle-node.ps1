@@ -138,27 +138,84 @@ function Install-IISAndPhpPrerequisites {
     Start-Service W3SVC
 }
 
-function Mount-MoodleDataShare {
+function Mount-MoodleShares {
     $storageAccount = $env:MOODLE_STORAGE_ACCOUNT
-    $shareName = $env:MOODLE_FILE_SHARE
-    $storageKey = $env:MOODLE_STORAGE_KEY
+    $dataShare     = $env:MOODLE_FILE_SHARE
+    $htmlShare     = $env:MOODLE_HTML_SHARE
+    $storageKey    = $env:MOODLE_STORAGE_KEY
 
-    if ([string]::IsNullOrWhiteSpace($storageAccount) -or [string]::IsNullOrWhiteSpace($shareName) -or [string]::IsNullOrWhiteSpace($storageKey)) {
+    if ([string]::IsNullOrWhiteSpace($storageAccount) -or
+        [string]::IsNullOrWhiteSpace($dataShare) -or
+        [string]::IsNullOrWhiteSpace($htmlShare) -or
+        [string]::IsNullOrWhiteSpace($storageKey)) {
         throw 'Storage account values were not provided to the setup script.'
     }
 
+    # Store credentials once for both shares
     cmdkey.exe /add:"$storageAccount.file.core.windows.net" /user:"localhost\$storageAccount" /pass:"$storageKey" | Out-Null
 
-    if (Get-PSDrive -Name 'Z' -ErrorAction SilentlyContinue) {
-        Remove-PSDrive -Name 'Z' -Force
-    }
-
-    $uncPath = "\\$storageAccount.file.core.windows.net\$shareName"
-    New-PSDrive -Name 'Z' -PSProvider FileSystem -Root $uncPath -Persist -Scope Global | Out-Null
+    # Z:\ -> moodledata (user files)
+    if (Get-PSDrive -Name 'Z' -ErrorAction SilentlyContinue) { Remove-PSDrive -Name 'Z' -Force }
+    New-PSDrive -Name 'Z' -PSProvider FileSystem -Root "\\$storageAccount.file.core.windows.net\$dataShare" -Persist -Scope Global | Out-Null
     New-Item -ItemType Directory -Force -Path 'Z:\moodledata' | Out-Null
+
+    # Y:\ -> moodlehtml (PHP code — source of truth, written by controller)
+    if (Get-PSDrive -Name 'Y' -ErrorAction SilentlyContinue) { Remove-PSDrive -Name 'Y' -Force }
+    New-PSDrive -Name 'Y' -PSProvider FileSystem -Root "\\$storageAccount.file.core.windows.net\$htmlShare" -Persist -Scope Global | Out-Null
+    New-Item -ItemType Directory -Force -Path 'Y:\html' | Out-Null
+}
+
+function Sync-MoodleCodeToLocal {
+    # Mirror Azure Files Y:\html → C:\moodle\html (local SSD).
+    # IIS serves from local disk for best PHP performance.
+    # Equivalent to what the official Azure/Moodle repo does with rsync on Linux.
+    New-Item -ItemType Directory -Force -Path 'C:\moodle\html', 'C:\moodle\logs' | Out-Null
+    $robocopyArgs = @(
+        'Y:\html', 'C:\moodle\html',
+        '/MIR',          # mirror — adds new, removes deleted
+        '/Z',            # restartable mode for large files
+        '/MT:8',         # 8 parallel threads
+        '/R:3',          # 3 retries on failure
+        '/W:5',          # 5s wait between retries
+        '/NP',           # no progress output
+        '/LOG+:C:\moodle\logs\robocopy-sync.log'
+    )
+    & robocopy @robocopyArgs
+    # Robocopy exit codes 0-7 are success (>7 means real error)
+    if ($LASTEXITCODE -gt 7) {
+        throw "Robocopy sync failed with exit code $LASTEXITCODE"
+    }
+}
+
+function Register-MoodleSyncTask {
+    # Scheduled task: pulls latest code from Azure Files every 5 minutes.
+    # No IP addresses — uses Azure Files UNC path directly.
+    # Mirrors the official Azure/Moodle Linux pattern (rsync via cron on webserver nodes).
+    $scriptPath = 'C:\moodle\sync-local.ps1'
+    $syncScript = @'
+$ErrorActionPreference = 'Stop'
+$robocopyArgs = @(
+    'Y:\html', 'C:\moodle\html',
+    '/MIR', '/Z', '/MT:8', '/R:3', '/W:5', '/NP',
+    '/LOG+:C:\moodle\logs\robocopy-sync.log'
+)
+& robocopy @robocopyArgs
+if ($LASTEXITCODE -gt 7) { exit $LASTEXITCODE }
+'@
+    Set-Content -Path $scriptPath -Value $syncScript -Encoding UTF8
+
+    $action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
+                   -Argument "-NonInteractive -WindowStyle Hidden -File `"$scriptPath`""
+    $trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 5) -Once `
+                   -At (Get-Date)
+    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 4) `
+                    -MultipleInstances IgnoreNew
+    Register-ScheduledTask -TaskName 'Moodle Code Sync' -Action $action `
+        -Trigger $trigger -Settings $settings -RunLevel Highest -Force | Out-Null
 }
 
 function Write-MoodleWebConfig {
+    # web.config lives on local disk alongside the synced code
     $webConfig = @'
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
@@ -191,10 +248,11 @@ function Write-MoodleWebConfig {
   </system.webServer>
 </configuration>
 '@
-
     Set-Content -Path 'C:\moodle\html\web.config' -Value $webConfig -Encoding UTF8
 }
 
 Install-IISAndPhpPrerequisites
-Mount-MoodleDataShare
+Mount-MoodleShares
+Sync-MoodleCodeToLocal   # Initial copy from Azure Files to local SSD
 Write-MoodleWebConfig
+Register-MoodleSyncTask  # Schedule recurring pull every 5 min (no IPs needed)

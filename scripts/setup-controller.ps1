@@ -143,50 +143,75 @@ function Install-GitForWindows {
     Start-Process -FilePath $gitInstaller -ArgumentList '/VERYSILENT', '/NORESTART', '/NOCANCEL', '/SP-' -Wait
 }
 
-function Mount-MoodleDataShare {
+function Mount-MoodleShares {
     $storageAccount = $env:MOODLE_STORAGE_ACCOUNT
-    $shareName = $env:MOODLE_FILE_SHARE
-    $storageKey = $env:MOODLE_STORAGE_KEY
+    $dataShare     = $env:MOODLE_FILE_SHARE
+    $htmlShare     = $env:MOODLE_HTML_SHARE
+    $storageKey    = $env:MOODLE_STORAGE_KEY
 
-    if ([string]::IsNullOrWhiteSpace($storageAccount) -or [string]::IsNullOrWhiteSpace($shareName) -or [string]::IsNullOrWhiteSpace($storageKey)) {
+    if ([string]::IsNullOrWhiteSpace($storageAccount) -or
+        [string]::IsNullOrWhiteSpace($dataShare) -or
+        [string]::IsNullOrWhiteSpace($htmlShare) -or
+        [string]::IsNullOrWhiteSpace($storageKey)) {
         throw 'Storage account values were not provided to the setup script.'
     }
 
     cmdkey.exe /add:"$storageAccount.file.core.windows.net" /user:"localhost\$storageAccount" /pass:"$storageKey" | Out-Null
 
-    if (Get-PSDrive -Name 'Z' -ErrorAction SilentlyContinue) {
-        Remove-PSDrive -Name 'Z' -Force
-    }
-
-    $uncPath = "\\$storageAccount.file.core.windows.net\$shareName"
-    New-PSDrive -Name 'Z' -PSProvider FileSystem -Root $uncPath -Persist -Scope Global | Out-Null
+    # Z:\ -> moodledata (user files)
+    if (Get-PSDrive -Name 'Z' -ErrorAction SilentlyContinue) { Remove-PSDrive -Name 'Z' -Force }
+    New-PSDrive -Name 'Z' -PSProvider FileSystem -Root "\\$storageAccount.file.core.windows.net\$dataShare" -Persist -Scope Global | Out-Null
     New-Item -ItemType Directory -Force -Path 'Z:\moodledata' | Out-Null
+
+    # Y:\ -> moodlehtml (PHP code — shared with all VMSS nodes via Azure Files)
+    if (Get-PSDrive -Name 'Y' -ErrorAction SilentlyContinue) { Remove-PSDrive -Name 'Y' -Force }
+    New-PSDrive -Name 'Y' -PSProvider FileSystem -Root "\\$storageAccount.file.core.windows.net\$htmlShare" -Persist -Scope Global | Out-Null
+    New-Item -ItemType Directory -Force -Path 'Y:\html' | Out-Null
 }
 
 function Install-Moodle {
     $workingDir = 'C:\moodle\install'
+    New-Item -ItemType Directory -Force -Path $workingDir | Out-Null
     $moodleZip = Join-Path $workingDir 'moodle-latest.zip'
     if (-not (Test-Path $moodleZip)) {
         Invoke-WebRequest -Uri 'https://download.moodle.org/latest.zip' -OutFile $moodleZip
     }
 
-    if (Test-Path 'C:\moodle\html') {
-        Get-ChildItem -Path 'C:\moodle\html' -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    Expand-Archive -Path $moodleZip -DestinationPath 'C:\moodle' -Force
-    if (Test-Path 'C:\moodle\moodle') {
-        Copy-Item -Path 'C:\moodle\moodle\*' -Destination 'C:\moodle\html' -Recurse -Force
-        Remove-Item -Path 'C:\moodle\moodle' -Recurse -Force
-    }
+    $tempExtract = 'C:\moodle\extract'
+    Expand-Archive -Path $moodleZip -DestinationPath $tempExtract -Force
+
+    # Copy extracted code to Y:\ (Azure Files share shared with all VMSS nodes)
+    $src = if (Test-Path "$tempExtract\moodle") { "$tempExtract\moodle\*" } else { "$tempExtract\*" }
+    Copy-Item -Path $src -Destination 'Y:\html' -Recurse -Force
+    Remove-Item -Path $tempExtract -Recurse -Force
 }
 
 function Register-MoodleCron {
     $taskName = 'Moodle Cron'
+    # Runs from local disk C:\moodle\html (synced from Azure Files Y:\html)
     schtasks.exe /Create /TN $taskName /TR '"C:\PHP\php.exe" "C:\moodle\html\admin\cli\cron.php"' /SC MINUTE /MO 1 /RU SYSTEM /F | Out-Null
+}
+
+function Set-ControllerIISSite {
+    Import-Module WebAdministration
+    if (Test-Path 'IIS:\Sites\Default Web Site') { Remove-Website -Name 'Default Web Site' }
+    # Controller serves from local disk too — same pattern as VMSS nodes
+    New-Item -ItemType Directory -Force -Path 'C:\moodle\html' | Out-Null
+    # Initial copy from Azure Files to local
+    $robocopyArgs = @('Y:\html', 'C:\moodle\html', '/MIR', '/Z', '/MT:8', '/NP')
+    & robocopy @robocopyArgs
+    if ($LASTEXITCODE -gt 7) { throw "Initial Robocopy failed: $LASTEXITCODE" }
+
+    if (-not (Test-Path 'IIS:\Sites\Moodle')) {
+        New-Website -Name 'Moodle' -Port 80 -PhysicalPath 'C:\moodle\html' -ApplicationPool 'MoodleAppPool' | Out-Null
+    } else {
+        Set-ItemProperty 'IIS:\Sites\Moodle' -Name physicalPath -Value 'C:\moodle\html'
+    }
 }
 
 Install-IISAndPhpPrerequisites
 Install-GitForWindows
-Mount-MoodleDataShare
-Install-Moodle
-Register-MoodleCron
+Mount-MoodleShares
+Install-Moodle          # Downloads Moodle to Y:\html (Azure Files — source of truth)
+Set-ControllerIISSite   # Copies Y:\html → C:\moodle\html, points IIS to local
+Register-MoodleCron     # cron.php runs from local disk
