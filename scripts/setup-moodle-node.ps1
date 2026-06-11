@@ -83,17 +83,26 @@ function Install-IISAndPhpPrerequisites {
     }
 
     Set-IniDirective -Path $phpIni -Key 'extension_dir' -Value '"ext"'
-    Set-IniDirective -Path $phpIni -Key 'memory_limit' -Value '256M'
-    Set-IniDirective -Path $phpIni -Key 'upload_max_filesize' -Value '128M'
-    Set-IniDirective -Path $phpIni -Key 'post_max_size' -Value '128M'
-    Set-IniDirective -Path $phpIni -Key 'max_execution_time' -Value '300'
-    Set-IniDirective -Path $phpIni -Key 'opcache.enable' -Value '1'
-    Set-IniDirective -Path $phpIni -Key 'opcache.enable_cli' -Value '1'
-    Set-IniDirective -Path $phpIni -Key 'opcache.memory_consumption' -Value '192'
-    Set-IniDirective -Path $phpIni -Key 'opcache.interned_strings_buffer' -Value '16'
-    Set-IniDirective -Path $phpIni -Key 'opcache.max_accelerated_files' -Value '10000'
-    Set-IniDirective -Path $phpIni -Key 'opcache.revalidate_freq' -Value '60'
-    Set-IniDirective -Path $phpIni -Key 'cgi.fix_pathinfo' -Value '1'
+    # PHP settings aligned with official Azure/Moodle repo (setup_webserver.sh)
+    Set-IniDirective -Path $phpIni -Key 'memory_limit'          -Value '512M'
+    Set-IniDirective -Path $phpIni -Key 'upload_max_filesize'   -Value '1024M'
+    Set-IniDirective -Path $phpIni -Key 'post_max_size'         -Value '1056M'
+    Set-IniDirective -Path $phpIni -Key 'max_execution_time'    -Value '18000'
+    Set-IniDirective -Path $phpIni -Key 'max_input_time'        -Value '600'
+    Set-IniDirective -Path $phpIni -Key 'max_input_vars'        -Value '100000'
+    # OPcache — validate_timestamps=1 is CRITICAL in VMSS/shared storage:
+    # ensures PHP notices file changes after Robocopy sync (not just after revalidate_freq)
+    Set-IniDirective -Path $phpIni -Key 'opcache.enable'                   -Value '1'
+    Set-IniDirective -Path $phpIni -Key 'opcache.enable_cli'               -Value '1'
+    Set-IniDirective -Path $phpIni -Key 'opcache.memory_consumption'       -Value '512'
+    Set-IniDirective -Path $phpIni -Key 'opcache.interned_strings_buffer'  -Value '16'
+    Set-IniDirective -Path $phpIni -Key 'opcache.max_accelerated_files'    -Value '20000'
+    Set-IniDirective -Path $phpIni -Key 'opcache.validate_timestamps'      -Value '1'
+    Set-IniDirective -Path $phpIni -Key 'opcache.revalidate_freq'          -Value '0'
+    Set-IniDirective -Path $phpIni -Key 'opcache.save_comments'            -Value '1'
+    Set-IniDirective -Path $phpIni -Key 'opcache.use_cwd'                  -Value '1'
+    Set-IniDirective -Path $phpIni -Key 'opcache.enable_file_override'     -Value '0'
+    Set-IniDirective -Path $phpIni -Key 'cgi.fix_pathinfo'                 -Value '1'
 
     $extensions = @(
         'php_curl.dll',

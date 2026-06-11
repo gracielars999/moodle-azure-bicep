@@ -79,17 +79,23 @@ function Install-IISAndPhpPrerequisites {
     }
 
     Set-IniDirective -Path $phpIni -Key 'extension_dir' -Value '"ext"'
-    Set-IniDirective -Path $phpIni -Key 'memory_limit' -Value '256M'
-    Set-IniDirective -Path $phpIni -Key 'upload_max_filesize' -Value '128M'
-    Set-IniDirective -Path $phpIni -Key 'post_max_size' -Value '128M'
-    Set-IniDirective -Path $phpIni -Key 'max_execution_time' -Value '300'
-    Set-IniDirective -Path $phpIni -Key 'opcache.enable' -Value '1'
-    Set-IniDirective -Path $phpIni -Key 'opcache.enable_cli' -Value '1'
-    Set-IniDirective -Path $phpIni -Key 'opcache.memory_consumption' -Value '192'
-    Set-IniDirective -Path $phpIni -Key 'opcache.interned_strings_buffer' -Value '16'
-    Set-IniDirective -Path $phpIni -Key 'opcache.max_accelerated_files' -Value '10000'
-    Set-IniDirective -Path $phpIni -Key 'opcache.revalidate_freq' -Value '60'
-    Set-IniDirective -Path $phpIni -Key 'cgi.fix_pathinfo' -Value '1'
+    Set-IniDirective -Path $phpIni -Key 'memory_limit'          -Value '512M'
+    Set-IniDirective -Path $phpIni -Key 'upload_max_filesize'   -Value '1024M'
+    Set-IniDirective -Path $phpIni -Key 'post_max_size'         -Value '1056M'
+    Set-IniDirective -Path $phpIni -Key 'max_execution_time'    -Value '18000'
+    Set-IniDirective -Path $phpIni -Key 'max_input_time'        -Value '600'
+    Set-IniDirective -Path $phpIni -Key 'max_input_vars'        -Value '100000'
+    Set-IniDirective -Path $phpIni -Key 'opcache.enable'                   -Value '1'
+    Set-IniDirective -Path $phpIni -Key 'opcache.enable_cli'               -Value '1'
+    Set-IniDirective -Path $phpIni -Key 'opcache.memory_consumption'       -Value '512'
+    Set-IniDirective -Path $phpIni -Key 'opcache.interned_strings_buffer'  -Value '16'
+    Set-IniDirective -Path $phpIni -Key 'opcache.max_accelerated_files'    -Value '20000'
+    Set-IniDirective -Path $phpIni -Key 'opcache.validate_timestamps'      -Value '1'
+    Set-IniDirective -Path $phpIni -Key 'opcache.revalidate_freq'          -Value '0'
+    Set-IniDirective -Path $phpIni -Key 'opcache.save_comments'            -Value '1'
+    Set-IniDirective -Path $phpIni -Key 'opcache.use_cwd'                  -Value '1'
+    Set-IniDirective -Path $phpIni -Key 'opcache.enable_file_override'     -Value '0'
+    Set-IniDirective -Path $phpIni -Key 'cgi.fix_pathinfo'                 -Value '1'
 
     $extensions = @(
         'php_curl.dll',
@@ -208,9 +214,7 @@ function Register-MoodleCron {
 function Set-ControllerIISSite {
     Import-Module WebAdministration
     if (Test-Path 'IIS:\Sites\Default Web Site') { Remove-Website -Name 'Default Web Site' }
-    # Controller serves from local disk too — same pattern as VMSS nodes
     New-Item -ItemType Directory -Force -Path 'C:\moodle\html' | Out-Null
-    # Initial copy from Azure Files to local
     $robocopyArgs = @('Y:\html', 'C:\moodle\html', '/MIR', '/Z', '/MT:8', '/NP')
     & robocopy @robocopyArgs
     if ($LASTEXITCODE -gt 7) { throw "Initial Robocopy failed: $LASTEXITCODE" }
@@ -220,11 +224,59 @@ function Set-ControllerIISSite {
     } else {
         Set-ItemProperty 'IIS:\Sites\Moodle' -Name physicalPath -Value 'C:\moodle\html'
     }
+
+    # Recycle App Pool after 300,000 requests — equivalent to PHP-FPM pm.max_requests=300000
+    # in the official repo. Prevents PHP-CGI memory leaks in long-running processes.
+    Set-ItemProperty 'IIS:\AppPools\MoodleAppPool' `
+        -Name recycling.periodicRestart.requests -Value 300000
+    # Also recycle daily at 03:00 as fallback (official repo recycles via process manager)
+    Clear-ItemProperty 'IIS:\AppPools\MoodleAppPool' -Name recycling.periodicRestart.schedule
+    $recycleTime = New-TimeSpan -Hours 3
+    Add-WebConfiguration -Filter "system.applicationHost/applicationPools/add[@name='MoodleAppPool']/recycling/periodicRestart/schedule" `
+        -Value @{ value = $recycleTime } -Force
+}
+
+function Register-DbBackupTask {
+    # Daily MySQL dump to Azure Files Z:\ — mirrors official Azure/Moodle:
+    # "22 02 * * * root mysqldump ... | gzip > /moodle/db-backup.sql.gz"
+    $mysqlHost = $env:MOODLE_MYSQL_HOST
+    $mysqlUser = $env:MOODLE_MYSQL_USER
+    $mysqlPass = $env:MOODLE_MYSQL_PASS
+    $mysqlDb   = $env:MOODLE_MYSQL_DB
+
+    if ([string]::IsNullOrWhiteSpace($mysqlHost)) { return }  # skip if not configured
+
+    $scriptPath = 'C:\moodle\backup-db.ps1'
+    $backupScript = @"
+`$ErrorActionPreference = 'Stop'
+`$date = Get-Date -Format 'yyyyMMdd'
+`$backupFile = "Z:\db-backup-`$date.sql.gz"
+New-Item -ItemType Directory -Force -Path 'Z:\' | Out-Null
+# Requires mysqldump in PATH (installed with MySQL client tools)
+`$env:MYSQL_PWD = '$mysqlPass'
+& mysqldump -h '$mysqlHost' -u '$mysqlUser' --databases '$mysqlDb' | `
+    & { param([string]`$in) [System.IO.Compression.GZipStream]::new([System.IO.File]::Create(`$backupFile), [System.IO.Compression.CompressionMode]::Compress).Write([System.Text.Encoding]::UTF8.GetBytes(`$in), 0, `$in.Length) }
+# Keep last 7 days of backups
+Get-ChildItem -Path 'Z:\' -Filter 'db-backup-*.sql.gz' |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -Skip 7 |
+    Remove-Item -Force
+"@
+    Set-Content -Path $scriptPath -Value $backupScript -Encoding UTF8
+
+    $action   = New-ScheduledTaskAction -Execute 'powershell.exe' `
+                    -Argument "-NonInteractive -WindowStyle Hidden -File `"$scriptPath`""
+    # Daily at 02:22 — same time as official repo
+    $trigger  = New-ScheduledTaskTrigger -Daily -At '02:22'
+    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+    Register-ScheduledTask -TaskName 'Moodle DB Backup' -Action $action `
+        -Trigger $trigger -Settings $settings -RunLevel Highest -Force | Out-Null
 }
 
 Install-IISAndPhpPrerequisites
 Install-GitForWindows
 Mount-MoodleShares
 Install-Moodle          # Downloads Moodle to Y:\html (Azure Files — source of truth)
-Set-ControllerIISSite   # Copies Y:\html → C:\moodle\html, points IIS to local
-Register-MoodleCron     # cron.php runs from local disk
+Set-ControllerIISSite   # Copies Y:\html → C:\moodle\html, IIS → local, App Pool recycling
+Register-MoodleCron     # cron.php every 1 min from local disk
+Register-DbBackupTask   # Daily mysqldump at 02:22 → Z:\db-backup-YYYYMMDD.sql.gz
