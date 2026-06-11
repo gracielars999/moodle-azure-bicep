@@ -1,0 +1,156 @@
+targetScope = 'resourceGroup'
+
+@description('Prefix used for naming all Moodle resources.')
+param prefix string = 'moodle'
+
+@description('Azure region for all regional resources.')
+param location string = resourceGroup().location
+
+@description('Administrator username for the VM scale set instances and controller VM.')
+param adminUsername string
+
+@description('Administrator password for the VM scale set instances and controller VM.')
+@secure()
+param adminPassword string
+
+@description('Administrator username for Azure Database for MySQL Flexible Server.')
+param mysqlAdminUsername string = 'moodleadmin'
+
+@description('Administrator password for Azure Database for MySQL Flexible Server.')
+@secure()
+param mysqlAdminPassword string
+
+@description('Custom domain to bind to Azure Front Door, for example moodle.contoso.com.')
+param customDomain string
+
+@description('Name of the Moodle database to create in MySQL.')
+param moodleDbName string = 'moodle'
+
+var tags = {
+  environment: prefix
+  application: 'moodle'
+  managedBy: 'bicep'
+}
+
+module network './modules/network.bicep' = {
+  name: 'network'
+  params: {
+    prefix: prefix
+    location: location
+    tags: tags
+  }
+}
+
+module mysql './modules/mysql.bicep' = {
+  name: 'mysql'
+  params: {
+    prefix: prefix
+    location: location
+    tags: tags
+    vnetId: network.outputs.vnetId
+    dataSubnetId: network.outputs.subnetIds.data
+    adminUsername: mysqlAdminUsername
+    adminPassword: mysqlAdminPassword
+    databaseName: moodleDbName
+  }
+}
+
+module redis './modules/redis.bicep' = {
+  name: 'redis'
+  params: {
+    prefix: prefix
+    location: location
+    tags: tags
+    vnetId: network.outputs.vnetId
+    dataSubnetId: network.outputs.subnetIds.data
+  }
+}
+
+module storage './modules/storage.bicep' = {
+  name: 'storage'
+  params: {
+    prefix: prefix
+    location: location
+    tags: tags
+    vnetId: network.outputs.vnetId
+    dataSubnetId: network.outputs.subnetIds.data
+  }
+}
+
+module compute './modules/compute.bicep' = {
+  name: 'compute'
+  dependsOn: [
+    network
+    storage
+  ]
+  params: {
+    prefix: prefix
+    location: location
+    tags: tags
+    adminUsername: adminUsername
+    adminPassword: adminPassword
+    frontendSubnetId: network.outputs.subnetIds.frontend
+    controlSubnetId: network.outputs.subnetIds.control
+    privatelinkSubnetId: network.outputs.subnetIds.privatelink
+    storageAccountName: storage.outputs.storageAccountName
+    fileShareName: storage.outputs.fileShareName
+    storageAccountKey: storage.outputs.primaryFileKey
+  }
+}
+
+module keyVault './modules/keyvault.bicep' = {
+  name: 'keyvault'
+  dependsOn: [
+    compute
+    mysql
+    redis
+    storage
+  ]
+  params: {
+    prefix: prefix
+    location: location
+    tags: tags
+    vnetId: network.outputs.vnetId
+    secretsSubnetId: network.outputs.subnetIds.secrets
+    vmssPrincipalId: compute.outputs.vmssPrincipalId
+    controllerPrincipalId: compute.outputs.controllerPrincipalId
+    mysqlPassword: mysqlAdminPassword
+    redisKey: redis.outputs.primaryKey
+    storageKey: storage.outputs.primaryFileKey
+  }
+}
+
+module frontDoor './modules/frontdoor.bicep' = {
+  name: 'frontdoor'
+  dependsOn: [
+    compute
+  ]
+  params: {
+    prefix: prefix
+    location: 'global'
+    tags: tags
+    customDomain: customDomain
+    privateLinkResourceId: compute.outputs.privateLinkServiceId
+    originHostName: compute.outputs.loadBalancerPrivateIp
+  }
+}
+
+module bastion './modules/bastion.bicep' = {
+  name: 'bastion'
+  dependsOn: [
+    network
+  ]
+  params: {
+    prefix: prefix
+    location: location
+    tags: tags
+    bastionSubnetId: network.outputs.subnetIds.bastion
+  }
+}
+
+output frontDoorEndpoint string = frontDoor.outputs.frontDoorEndpoint
+output mysqlFQDN string = mysql.outputs.mysqlFqdn
+output storageAccountName string = storage.outputs.storageAccountName
+output keyVaultName string = keyVault.outputs.keyVaultName
+output vmssName string = compute.outputs.vmssName
+output controllerVmName string = compute.outputs.controllerVmName

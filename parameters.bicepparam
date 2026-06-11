@@ -1,0 +1,10 @@
+using './main.bicep'
+
+param prefix = 'moodle'
+param location = 'eastus'
+param adminUsername = '<vm-admin-username>'
+param adminPassword = '<vm-admin-password>'
+param mysqlAdminUsername = 'moodleadmin'
+param mysqlAdminPassword = '<mysql-admin-password>'
+param customDomain = 'moodle.contoso.com'
+param moodleDbName = 'moodle'
