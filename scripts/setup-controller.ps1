@@ -180,10 +180,23 @@ function Install-Moodle {
     $tempExtract = 'C:\moodle\extract'
     Expand-Archive -Path $moodleZip -DestinationPath $tempExtract -Force
 
-    # Copy extracted code to Y:\ (Azure Files share shared with all VMSS nodes)
     $src = if (Test-Path "$tempExtract\moodle") { "$tempExtract\moodle\*" } else { "$tempExtract\*" }
     Copy-Item -Path $src -Destination 'Y:\html' -Recurse -Force
     Remove-Item -Path $tempExtract -Recurse -Force
+
+    # Write deploy timestamp to Azure Files — VMSS nodes watch this file.
+    # Run this script again after every Moodle upgrade or plugin install
+    # to signal all VMSS nodes to re-sync. Mirrors the official Azure/Moodle
+    # 'update_last_modified_time.moodle_on_azure.sh' pattern.
+    Update-MoodleDeployTimestamp
+}
+
+function Update-MoodleDeployTimestamp {
+    # Touching this file triggers Robocopy sync on all VMSS nodes within 1 minute.
+    # Run this manually on the controller after every code change to Y:\html.
+    $timestamp = Get-Date -Format 'yyyyMMddHHmmss'
+    Set-Content -Path 'Y:\html\.last_modified_time.moodle_on_azure' -Value $timestamp -Encoding UTF8
+    Write-Host "Deploy timestamp updated: $timestamp — VMSS nodes will sync within ~1 minute."
 }
 
 function Register-MoodleCron {

@@ -188,28 +188,58 @@ function Sync-MoodleCodeToLocal {
 }
 
 function Register-MoodleSyncTask {
-    # Scheduled task: pulls latest code from Azure Files every 5 minutes.
-    # No IP addresses — uses Azure Files UNC path directly.
-    # Mirrors the official Azure/Moodle Linux pattern (rsync via cron on webserver nodes).
+    # Scheduled task: checks timestamp file on Azure Files every minute.
+    # Only runs Robocopy if the server timestamp differs from local — zero I/O otherwise.
+    # Mirrors the official Azure/Moodle Linux pattern exactly:
+    #   - Runs every 1 minute (same as '* * * * *' cron in the official repo)
+    #   - Skips Robocopy when code hasn't changed (avoids unnecessary Azure Files I/O)
+    #   - Random jitter 0-30s prevents thundering herd when all VMSS nodes
+    #     detect a new deploy at the same time
     $scriptPath = 'C:\moodle\sync-local.ps1'
     $syncScript = @'
 $ErrorActionPreference = 'Stop'
-$robocopyArgs = @(
-    'Y:\html', 'C:\moodle\html',
-    '/MIR', '/Z', '/MT:8', '/R:3', '/W:5', '/NP',
-    '/LOG+:C:\moodle\logs\robocopy-sync.log'
-)
-& robocopy @robocopyArgs
-if ($LASTEXITCODE -gt 7) { exit $LASTEXITCODE }
+$serverTimestamp = 'Y:\html\.last_modified_time.moodle_on_azure'
+$localTimestamp  = 'C:\moodle\html\.last_modified_time.moodle_on_azure'
+$logFile         = 'C:\moodle\logs\robocopy-sync.log'
+
+New-Item -ItemType Directory -Force -Path 'C:\moodle\logs' | Out-Null
+
+if (-not (Test-Path $serverTimestamp)) {
+    Write-EventLog -LogName Application -Source 'MoodleSync' -EventId 1001 -EntryType Warning `
+        -Message "Server timestamp not found at $serverTimestamp. Is Azure Files (Y:\) mounted?"
+    exit 1
+}
+
+$srvTime = (Get-Content $serverTimestamp -Raw).Trim()
+$locTime = if (Test-Path $localTimestamp) { (Get-Content $localTimestamp -Raw).Trim() } else { '' }
+
+if ($srvTime -ne $locTime) {
+    # Jitter 0-30s: prevents all VMSS nodes from hitting Azure Files simultaneously
+    Start-Sleep -Seconds (Get-Random -Minimum 0 -Maximum 30)
+
+    Add-Content -Path $logFile -Value "[$(Get-Date -Format 'u')] Sync triggered — server: $srvTime  local: $locTime"
+
+    $robocopyArgs = @('Y:\html', 'C:\moodle\html', '/MIR', '/Z', '/MT:8', '/R:3', '/W:5', '/NP', "/LOG+:$logFile")
+    & robocopy @robocopyArgs
+    if ($LASTEXITCODE -gt 7) {
+        Add-Content -Path $logFile -Value "[$(Get-Date -Format 'u')] ERROR: Robocopy failed with exit $LASTEXITCODE"
+        exit $LASTEXITCODE
+    }
+    Add-Content -Path $logFile -Value "[$(Get-Date -Format 'u')] Sync completed."
+}
+# Timestamps match → task exits in <1ms, zero Azure Files I/O
 '@
+    New-Item -ItemType Directory -Force -Path 'C:\moodle\logs' | Out-Null
     Set-Content -Path $scriptPath -Value $syncScript -Encoding UTF8
 
-    $action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
-                   -Argument "-NonInteractive -WindowStyle Hidden -File `"$scriptPath`""
-    $trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 5) -Once `
-                   -At (Get-Date)
-    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 4) `
-                    -MultipleInstances IgnoreNew
+    if (-not [System.Diagnostics.EventLog]::SourceExists('MoodleSync')) {
+        New-EventLog -LogName Application -Source 'MoodleSync'
+    }
+
+    $action   = New-ScheduledTaskAction -Execute 'powershell.exe' `
+                    -Argument "-NonInteractive -WindowStyle Hidden -File `"$scriptPath`""
+    $trigger  = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 1) -Once -At (Get-Date)
+    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
     Register-ScheduledTask -TaskName 'Moodle Code Sync' -Action $action `
         -Trigger $trigger -Settings $settings -RunLevel Highest -Force | Out-Null
 }
