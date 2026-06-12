@@ -10,24 +10,17 @@ param tags object
 @description('Address space for the virtual network, e.g. 10.0.0.0/16.')
 param vnetAddressPrefix string = '10.0.0.0/16'
 
-@description('Address prefix for the frontend subnet (VMSS + ILB). Must be within vnetAddressPrefix.')
+@description('Address prefix for the frontend subnet (VMSS + ILB + Private Link Service). Must be within vnetAddressPrefix.')
 param subnetFrontendPrefix string = '10.0.1.0/24'
 
 @description('Address prefix for the control subnet (Controller VM). Must be within vnetAddressPrefix.')
 param subnetControlPrefix string = '10.0.2.0/24'
 
-@description('Address prefix for the data subnet (MySQL, Redis, Storage private endpoints). Must be within vnetAddressPrefix.')
+@description('Address prefix for the data subnet (all private endpoints: MySQL, Redis, Storage, Key Vault). Must be within vnetAddressPrefix.')
 param subnetDataPrefix string = '10.0.3.0/24'
-
-@description('Address prefix for the secrets subnet (Key Vault private endpoint). Must be within vnetAddressPrefix.')
-#disable-next-line secure-secrets-in-params
-param subnetSecretsPrefix string = '10.0.4.0/24'
 
 @description('Address prefix for Azure Bastion subnet. Must be /27 or larger and within vnetAddressPrefix.')
 param subnetBastionPrefix string = '10.0.5.0/27'
-
-@description('Address prefix for the Private Link service subnet (Front Door origin). Must be within vnetAddressPrefix.')
-param subnetPrivateLinkPrefix string = '10.0.6.0/24'
 
 var vnetName = '${prefix}-vnet'
 
@@ -72,7 +65,7 @@ resource frontendNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
           protocol: 'Tcp'
           sourcePortRange: '*'
           destinationPortRange: '3389'
-          sourceAddressPrefix: '10.0.5.0/27'
+          sourceAddressPrefix: subnetBastionPrefix
           destinationAddressPrefix: '*'
         }
       }
@@ -121,7 +114,7 @@ resource controlNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
           protocol: 'Tcp'
           sourcePortRange: '*'
           destinationPortRange: '3389'
-          sourceAddressPrefix: '10.0.5.0/27'
+          sourceAddressPrefix: subnetBastionPrefix
           destinationAddressPrefix: '*'
         }
       }
@@ -144,29 +137,6 @@ resource controlNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
 
 resource dataNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
   name: '${prefix}-data-nsg'
-  location: location
-  tags: tags
-  properties: {
-    securityRules: [
-      {
-        name: 'Deny-Internet-Inbound'
-        properties: {
-          priority: 4000
-          direction: 'Inbound'
-          access: 'Deny'
-          protocol: '*'
-          sourcePortRange: '*'
-          destinationPortRange: '*'
-          sourceAddressPrefix: 'Internet'
-          destinationAddressPrefix: '*'
-        }
-      }
-    ]
-  }
-}
-
-resource secretsNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
-  name: '${prefix}-secrets-nsg'
   location: location
   tags: tags
   properties: {
@@ -324,29 +294,6 @@ resource bastionNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
   }
 }
 
-resource privateLinkNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
-  name: '${prefix}-privatelink-nsg'
-  location: location
-  tags: tags
-  properties: {
-    securityRules: [
-      {
-        name: 'Deny-Internet-Inbound'
-        properties: {
-          priority: 4000
-          direction: 'Inbound'
-          access: 'Deny'
-          protocol: '*'
-          sourcePortRange: '*'
-          destinationPortRange: '*'
-          sourceAddressPrefix: 'Internet'
-          destinationAddressPrefix: '*'
-        }
-      }
-    ]
-  }
-}
-
 resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
   name: vnetName
   location: location
@@ -362,13 +309,17 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
     // deployed in parallel will race and fail. Inline = single API call.
     subnets: [
       {
+        // Hosts VMSS nodes, Internal Load Balancer, and Private Link Service NAT IPs.
+        // privateLinkServiceNetworkPolicies must be Disabled for PLS to function.
         name: 'frontend'
         properties: {
           addressPrefix: subnetFrontendPrefix
+          privateLinkServiceNetworkPolicies: 'Disabled'
           networkSecurityGroup: { id: frontendNsg.id }
         }
       }
       {
+        // Hosts the Controller VM (code deploy, cron, RDP jump target via Bastion).
         name: 'control'
         properties: {
           addressPrefix: subnetControlPrefix
@@ -376,6 +327,8 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
         }
       }
       {
+        // Hosts all private endpoints: MySQL, Redis, Storage, and Key Vault.
+        // Consolidating endpoints into one subnet reduces cost and simplifies DNS.
         name: 'data'
         properties: {
           addressPrefix: subnetDataPrefix
@@ -384,40 +337,22 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
         }
       }
       {
-        name: 'secrets'
-        properties: {
-          addressPrefix: subnetSecretsPrefix
-          privateEndpointNetworkPolicies: 'Enabled'
-          networkSecurityGroup: { id: secretsNsg.id }
-        }
-      }
-      {
+        // Required name — Azure Bastion will not deploy to a differently named subnet.
         name: 'AzureBastionSubnet'
         properties: {
           addressPrefix: subnetBastionPrefix
           networkSecurityGroup: { id: bastionNsg.id }
         }
       }
-      {
-        name: 'privatelink'
-        properties: {
-          addressPrefix: subnetPrivateLinkPrefix
-          privateEndpointNetworkPolicies: 'Enabled'
-          privateLinkServiceNetworkPolicies: 'Disabled'
-          networkSecurityGroup: { id: privateLinkNsg.id }
-        }
-      }
     ]
   }
 }
 
-// Symbolic references to inline subnets for use in output
-var subnetFrontend   = vnet.properties.subnets[0].id
-var subnetControl    = vnet.properties.subnets[1].id
-var subnetData       = vnet.properties.subnets[2].id
-var subnetSecrets    = vnet.properties.subnets[3].id
-var subnetBastion    = vnet.properties.subnets[4].id
-var subnetPrivateLink = vnet.properties.subnets[5].id
+// Symbolic references to inline subnets (4 subnets, indices 0-3)
+var subnetFrontend = vnet.properties.subnets[0].id
+var subnetControl  = vnet.properties.subnets[1].id
+var subnetData     = vnet.properties.subnets[2].id
+var subnetBastion  = vnet.properties.subnets[3].id
 
 output vnetId string = vnet.id
 output vnetName string = vnet.name
@@ -425,7 +360,5 @@ output subnetIds object = {
   frontend: subnetFrontend
   control: subnetControl
   data: subnetData
-  secrets: subnetSecrets
   bastion: subnetBastion
-  privatelink: subnetPrivateLink
 }

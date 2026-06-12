@@ -39,7 +39,7 @@ var controllerVmName = '${prefix}-controller-vm'
 var controllerNicName = '${prefix}-controller-nic'
 var privateLinkServiceName = '${prefix}-pls'
 var loadBalancerPrivateIp = '10.0.1.10'
-var privateLinkNatIp = '10.0.6.10'
+var privateLinkNatIp = '10.0.1.20'
 var loadBalancerFrontendId = resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', loadBalancerName, 'frontend')
 var loadBalancerBackendPoolId = resourceId('Microsoft.Network/loadBalancers/backendAddressPools', loadBalancerName, 'backendpool')
 var loadBalancerProbeId = resourceId('Microsoft.Network/loadBalancers/probes', loadBalancerName, 'http-probe')
@@ -137,6 +137,7 @@ resource privateLinkService 'Microsoft.Network/privateLinkServices@2024-01-01' =
   name: privateLinkServiceName
   location: location
   tags: tags
+  dependsOn: [loadBalancer] // ILB must exist before PLS can reference its frontend IP config
   properties: {
     autoApproval: {
       subscriptions: []
@@ -181,9 +182,8 @@ resource vmss 'Microsoft.Compute/virtualMachineScaleSets@2024-03-01' = {
     type: 'SystemAssigned'
   }
   properties: {
-    orchestrationMode: 'Flexible'
+    orchestrationMode: 'Uniform'
     overprovision: false
-    platformFaultDomainCount: 1
     upgradePolicy: {
       mode: 'Automatic'
     }

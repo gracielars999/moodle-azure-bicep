@@ -13,8 +13,9 @@ param vnetId string
 @description('Subnet resource ID used for the Redis private endpoint.')
 param dataSubnetId string
 
-var redisName = toLower(take('${prefix}-redis-${uniqueString(resourceGroup().id)}', 63))
-var privateDnsZoneName = 'privatelink.redis.cache.windows.net'
+var redisName = toLower(take('${prefix}-redis-${uniqueString(resourceGroup().id)}', 40))
+// Azure Managed Redis uses a region-scoped private DNS zone
+var privateDnsZoneName = 'privatelink.${location}.redisenterprise.cache.azure.net'
 
 resource privateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
   name: privateDnsZoneName
@@ -35,21 +36,31 @@ resource dnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-
   }
 }
 
-resource redis 'Microsoft.Cache/redis@2024-11-01' = {
+// Azure Managed Redis cluster (replaces the retired Azure Cache for Redis)
+// Balanced_B1 = 6 GB RAM, sufficient for 1000 users / 400 concurrent on Moodle
+resource redis 'Microsoft.Cache/redisEnterprise@2024-10-01' = {
   name: redisName
   location: location
   tags: tags
+  sku: {
+    name: 'Balanced_B1'
+    capacity: 2
+  }
   properties: {
-    sku: {
-      name: 'Standard'
-      family: 'C'
-      capacity: 1
-    }
-    redisVersion: '6'
-    enableNonSslPort: false
     minimumTlsVersion: '1.2'
-    publicNetworkAccess: 'Disabled'
-    redisConfiguration: {}
+  }
+}
+
+// Each cluster must have exactly one database named 'default'
+resource redisDatabase 'Microsoft.Cache/redisEnterprise/databases@2024-10-01' = {
+  parent: redis
+  name: 'default'
+  properties: {
+    clientProtocol: 'Encrypted'
+    // EnterpriseCluster = single key space; compatible with standard Redis clients (phpredis)
+    clusteringPolicy: 'EnterpriseCluster'
+    evictionPolicy: 'VolatileLRU'
+    port: 10000
   }
 }
 
@@ -67,7 +78,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-01-01' = {
         properties: {
           privateLinkServiceId: redis.id
           groupIds: [
-            'redisCache'
+            'redisEnterprise'
           ]
         }
       }
@@ -92,5 +103,5 @@ resource dnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2
 
 output redisId string = redis.id
 output redisName string = redis.name
-output primaryKey string = redis.listKeys().primaryKey
+output primaryKey string = redisDatabase.listKeys().primaryKey
 output hostname string = redis.properties.hostName

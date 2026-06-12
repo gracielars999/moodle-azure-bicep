@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "2787027284840999859"
+      "templateHash": "12254369228741184211"
     }
   },
   "parameters": {
@@ -72,7 +72,7 @@
       "type": "string",
       "defaultValue": "10.0.1.0/24",
       "metadata": {
-        "description": "Address prefix for the frontend subnet (VMSS + ILB)."
+        "description": "Address prefix for the frontend subnet (VMSS + ILB + Private Link Service)."
       }
     },
     "subnetControlPrefix": {
@@ -86,14 +86,7 @@
       "type": "string",
       "defaultValue": "10.0.3.0/24",
       "metadata": {
-        "description": "Address prefix for the data subnet (private endpoints for MySQL, Redis, Storage)."
-      }
-    },
-    "subnetSecretsPrefix": {
-      "type": "string",
-      "defaultValue": "10.0.4.0/24",
-      "metadata": {
-        "description": "Address prefix for the secrets subnet (Key Vault private endpoint)."
+        "description": "Address prefix for the data subnet (all private endpoints: MySQL, Redis, Storage, Key Vault)."
       }
     },
     "subnetBastionPrefix": {
@@ -101,13 +94,6 @@
       "defaultValue": "10.0.5.0/27",
       "metadata": {
         "description": "Address prefix for the Azure Bastion subnet. Must be /27 or larger."
-      }
-    },
-    "subnetPrivateLinkPrefix": {
-      "type": "string",
-      "defaultValue": "10.0.6.0/24",
-      "metadata": {
-        "description": "Address prefix for the Private Link service subnet (Front Door origin)."
       }
     }
   },
@@ -150,14 +136,8 @@
           "subnetDataPrefix": {
             "value": "[parameters('subnetDataPrefix')]"
           },
-          "subnetSecretsPrefix": {
-            "value": "[parameters('subnetSecretsPrefix')]"
-          },
           "subnetBastionPrefix": {
             "value": "[parameters('subnetBastionPrefix')]"
-          },
-          "subnetPrivateLinkPrefix": {
-            "value": "[parameters('subnetPrivateLinkPrefix')]"
           }
         },
         "template": {
@@ -167,7 +147,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "6298100031635922130"
+              "templateHash": "15111718159144036377"
             }
           },
           "parameters": {
@@ -200,7 +180,7 @@
               "type": "string",
               "defaultValue": "10.0.1.0/24",
               "metadata": {
-                "description": "Address prefix for the frontend subnet (VMSS + ILB). Must be within vnetAddressPrefix."
+                "description": "Address prefix for the frontend subnet (VMSS + ILB + Private Link Service). Must be within vnetAddressPrefix."
               }
             },
             "subnetControlPrefix": {
@@ -214,14 +194,7 @@
               "type": "string",
               "defaultValue": "10.0.3.0/24",
               "metadata": {
-                "description": "Address prefix for the data subnet (MySQL, Redis, Storage private endpoints). Must be within vnetAddressPrefix."
-              }
-            },
-            "subnetSecretsPrefix": {
-              "type": "string",
-              "defaultValue": "10.0.4.0/24",
-              "metadata": {
-                "description": "Address prefix for the secrets subnet (Key Vault private endpoint). Must be within vnetAddressPrefix."
+                "description": "Address prefix for the data subnet (all private endpoints: MySQL, Redis, Storage, Key Vault). Must be within vnetAddressPrefix."
               }
             },
             "subnetBastionPrefix": {
@@ -229,13 +202,6 @@
               "defaultValue": "10.0.5.0/27",
               "metadata": {
                 "description": "Address prefix for Azure Bastion subnet. Must be /27 or larger and within vnetAddressPrefix."
-              }
-            },
-            "subnetPrivateLinkPrefix": {
-              "type": "string",
-              "defaultValue": "10.0.6.0/24",
-              "metadata": {
-                "description": "Address prefix for the Private Link service subnet (Front Door origin). Must be within vnetAddressPrefix."
               }
             }
           },
@@ -286,7 +252,7 @@
                       "protocol": "Tcp",
                       "sourcePortRange": "*",
                       "destinationPortRange": "3389",
-                      "sourceAddressPrefix": "10.0.5.0/27",
+                      "sourceAddressPrefix": "[parameters('subnetBastionPrefix')]",
                       "destinationAddressPrefix": "*"
                     }
                   },
@@ -336,7 +302,7 @@
                       "protocol": "Tcp",
                       "sourcePortRange": "*",
                       "destinationPortRange": "3389",
-                      "sourceAddressPrefix": "10.0.5.0/27",
+                      "sourceAddressPrefix": "[parameters('subnetBastionPrefix')]",
                       "destinationAddressPrefix": "*"
                     }
                   },
@@ -360,30 +326,6 @@
               "type": "Microsoft.Network/networkSecurityGroups",
               "apiVersion": "2024-01-01",
               "name": "[format('{0}-data-nsg', parameters('prefix'))]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "properties": {
-                "securityRules": [
-                  {
-                    "name": "Deny-Internet-Inbound",
-                    "properties": {
-                      "priority": 4000,
-                      "direction": "Inbound",
-                      "access": "Deny",
-                      "protocol": "*",
-                      "sourcePortRange": "*",
-                      "destinationPortRange": "*",
-                      "sourceAddressPrefix": "Internet",
-                      "destinationAddressPrefix": "*"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "type": "Microsoft.Network/networkSecurityGroups",
-              "apiVersion": "2024-01-01",
-              "name": "[format('{0}-secrets-nsg', parameters('prefix'))]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "properties": {
@@ -542,30 +484,6 @@
               }
             },
             {
-              "type": "Microsoft.Network/networkSecurityGroups",
-              "apiVersion": "2024-01-01",
-              "name": "[format('{0}-privatelink-nsg', parameters('prefix'))]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "properties": {
-                "securityRules": [
-                  {
-                    "name": "Deny-Internet-Inbound",
-                    "properties": {
-                      "priority": 4000,
-                      "direction": "Inbound",
-                      "access": "Deny",
-                      "protocol": "*",
-                      "sourcePortRange": "*",
-                      "destinationPortRange": "*",
-                      "sourceAddressPrefix": "Internet",
-                      "destinationAddressPrefix": "*"
-                    }
-                  }
-                ]
-              }
-            },
-            {
               "type": "Microsoft.Network/virtualNetworks",
               "apiVersion": "2024-01-01",
               "name": "[variables('vnetName')]",
@@ -582,6 +500,7 @@
                     "name": "frontend",
                     "properties": {
                       "addressPrefix": "[parameters('subnetFrontendPrefix')]",
+                      "privateLinkServiceNetworkPolicies": "Disabled",
                       "networkSecurityGroup": {
                         "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-frontend-nsg', parameters('prefix')))]"
                       }
@@ -607,32 +526,11 @@
                     }
                   },
                   {
-                    "name": "secrets",
-                    "properties": {
-                      "addressPrefix": "[parameters('subnetSecretsPrefix')]",
-                      "privateEndpointNetworkPolicies": "Enabled",
-                      "networkSecurityGroup": {
-                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-secrets-nsg', parameters('prefix')))]"
-                      }
-                    }
-                  },
-                  {
                     "name": "AzureBastionSubnet",
                     "properties": {
                       "addressPrefix": "[parameters('subnetBastionPrefix')]",
                       "networkSecurityGroup": {
                         "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-bastion-nsg', parameters('prefix')))]"
-                      }
-                    }
-                  },
-                  {
-                    "name": "privatelink",
-                    "properties": {
-                      "addressPrefix": "[parameters('subnetPrivateLinkPrefix')]",
-                      "privateEndpointNetworkPolicies": "Enabled",
-                      "privateLinkServiceNetworkPolicies": "Disabled",
-                      "networkSecurityGroup": {
-                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-privatelink-nsg', parameters('prefix')))]"
                       }
                     }
                   }
@@ -642,9 +540,7 @@
                 "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-bastion-nsg', parameters('prefix')))]",
                 "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-control-nsg', parameters('prefix')))]",
                 "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-data-nsg', parameters('prefix')))]",
-                "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-frontend-nsg', parameters('prefix')))]",
-                "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-privatelink-nsg', parameters('prefix')))]",
-                "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-secrets-nsg', parameters('prefix')))]"
+                "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-frontend-nsg', parameters('prefix')))]"
               ]
             }
           ],
@@ -663,9 +559,7 @@
                 "frontend": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[0].id]",
                 "control": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[1].id]",
                 "data": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[2].id]",
-                "secrets": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[3].id]",
-                "bastion": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[4].id]",
-                "privatelink": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[5].id]"
+                "bastion": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[3].id]"
               }
             }
           }
@@ -966,7 +860,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "9784991976164991447"
+              "templateHash": "15350427664697632230"
             }
           },
           "parameters": {
@@ -1002,8 +896,8 @@
             }
           },
           "variables": {
-            "redisName": "[toLower(take(format('{0}-redis-{1}', parameters('prefix'), uniqueString(resourceGroup().id)), 63))]",
-            "privateDnsZoneName": "privatelink.redis.cache.windows.net"
+            "redisName": "[toLower(take(format('{0}-redis-{1}', parameters('prefix'), uniqueString(resourceGroup().id)), 40))]",
+            "privateDnsZoneName": "[format('privatelink.{0}.redisenterprise.cache.azure.net', parameters('location'))]"
           },
           "resources": [
             {
@@ -1030,23 +924,32 @@
               ]
             },
             {
-              "type": "Microsoft.Cache/redis",
-              "apiVersion": "2024-11-01",
+              "type": "Microsoft.Cache/redisEnterprise",
+              "apiVersion": "2024-10-01",
               "name": "[variables('redisName')]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Balanced_B1",
+                "capacity": 2
+              },
               "properties": {
-                "sku": {
-                  "name": "Standard",
-                  "family": "C",
-                  "capacity": 1
-                },
-                "redisVersion": "6",
-                "enableNonSslPort": false,
-                "minimumTlsVersion": "1.2",
-                "publicNetworkAccess": "Disabled",
-                "redisConfiguration": {}
+                "minimumTlsVersion": "1.2"
               }
+            },
+            {
+              "type": "Microsoft.Cache/redisEnterprise/databases",
+              "apiVersion": "2024-10-01",
+              "name": "[format('{0}/{1}', variables('redisName'), 'default')]",
+              "properties": {
+                "clientProtocol": "Encrypted",
+                "clusteringPolicy": "EnterpriseCluster",
+                "evictionPolicy": "VolatileLRU",
+                "port": 10000
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Cache/redisEnterprise', variables('redisName'))]"
+              ]
             },
             {
               "type": "Microsoft.Network/privateEndpoints",
@@ -1062,16 +965,16 @@
                   {
                     "name": "[format('{0}-connection', variables('redisName'))]",
                     "properties": {
-                      "privateLinkServiceId": "[resourceId('Microsoft.Cache/redis', variables('redisName'))]",
+                      "privateLinkServiceId": "[resourceId('Microsoft.Cache/redisEnterprise', variables('redisName'))]",
                       "groupIds": [
-                        "redisCache"
+                        "redisEnterprise"
                       ]
                     }
                   }
                 ]
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Cache/redis', variables('redisName'))]"
+                "[resourceId('Microsoft.Cache/redisEnterprise', variables('redisName'))]"
               ]
             },
             {
@@ -1097,7 +1000,7 @@
           "outputs": {
             "redisId": {
               "type": "string",
-              "value": "[resourceId('Microsoft.Cache/redis', variables('redisName'))]"
+              "value": "[resourceId('Microsoft.Cache/redisEnterprise', variables('redisName'))]"
             },
             "redisName": {
               "type": "string",
@@ -1105,11 +1008,11 @@
             },
             "primaryKey": {
               "type": "string",
-              "value": "[listKeys(resourceId('Microsoft.Cache/redis', variables('redisName')), '2024-11-01').primaryKey]"
+              "value": "[listKeys(resourceId('Microsoft.Cache/redisEnterprise/databases', variables('redisName'), 'default'), '2024-10-01').primaryKey]"
             },
             "hostname": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.Cache/redis', variables('redisName')), '2024-11-01').hostName]"
+              "value": "[reference(resourceId('Microsoft.Cache/redisEnterprise', variables('redisName')), '2024-10-01').hostName]"
             }
           }
         }
@@ -1374,7 +1277,7 @@
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.subnetIds.value.control]"
           },
           "privatelinkSubnetId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.subnetIds.value.privatelink]"
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.subnetIds.value.frontend]"
           },
           "storageAccountName": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountName.value]"
@@ -1393,7 +1296,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "4813318985254197264"
+              "templateHash": "9498902921871881652"
             }
           },
           "parameters": {
@@ -1473,7 +1376,7 @@
             "controllerNicName": "[format('{0}-controller-nic', parameters('prefix'))]",
             "privateLinkServiceName": "[format('{0}-pls', parameters('prefix'))]",
             "loadBalancerPrivateIp": "10.0.1.10",
-            "privateLinkNatIp": "10.0.6.10",
+            "privateLinkNatIp": "10.0.1.20",
             "loadBalancerFrontendId": "[resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', variables('loadBalancerName'), 'frontend')]",
             "loadBalancerBackendPoolId": "[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', variables('loadBalancerName'), 'backendpool')]",
             "loadBalancerProbeId": "[resourceId('Microsoft.Network/loadBalancers/probes', variables('loadBalancerName'), 'http-probe')]",
@@ -1603,7 +1506,10 @@
                 "visibility": {
                   "subscriptions": []
                 }
-              }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]"
+              ]
             },
             {
               "type": "Microsoft.Compute/virtualMachineScaleSets",
@@ -1620,9 +1526,8 @@
                 "type": "SystemAssigned"
               },
               "properties": {
-                "orchestrationMode": "Flexible",
+                "orchestrationMode": "Uniform",
                 "overprovision": false,
-                "platformFaultDomainCount": 1,
                 "upgradePolicy": {
                   "mode": "Automatic"
                 },
@@ -1905,8 +1810,8 @@
           "vnetId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.vnetId.value]"
           },
-          "secretsSubnetId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.subnetIds.value.secrets]"
+          "dataSubnetId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.subnetIds.value.data]"
           },
           "vmssPrincipalId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'compute'), '2025-04-01').outputs.vmssPrincipalId.value]"
@@ -1931,7 +1836,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "12378620803238888414"
+              "templateHash": "1402556462001818606"
             }
           },
           "parameters": {
@@ -1959,10 +1864,10 @@
                 "description": "Virtual network resource ID used for private DNS linking."
               }
             },
-            "secretsSubnetId": {
+            "dataSubnetId": {
               "type": "string",
               "metadata": {
-                "description": "Subnet resource ID used for the Key Vault private endpoint."
+                "description": "Subnet resource ID used for the Key Vault private endpoint (data subnet)."
               }
             },
             "vmssPrincipalId": {
@@ -2054,7 +1959,7 @@
               "tags": "[parameters('tags')]",
               "properties": {
                 "subnet": {
-                  "id": "[parameters('secretsSubnetId')]"
+                  "id": "[parameters('dataSubnetId')]"
                 },
                 "privateLinkServiceConnections": [
                   {
@@ -2200,6 +2105,9 @@
           },
           "originHostName": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'compute'), '2025-04-01').outputs.loadBalancerPrivateIp.value]"
+          },
+          "privateLinkLocation": {
+            "value": "[parameters('location')]"
           }
         },
         "template": {
@@ -2209,7 +2117,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "13283114815065821894"
+              "templateHash": "7399026957533978502"
             }
           },
           "parameters": {
@@ -2248,6 +2156,12 @@
               "type": "string",
               "metadata": {
                 "description": "Origin host header and hostname used by Front Door to reach the internal load balancer."
+              }
+            },
+            "privateLinkLocation": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region where the Private Link Service is deployed. Required by Front Door to approve the private endpoint connection."
               }
             }
           },
@@ -2349,7 +2263,7 @@
                     "id": "[parameters('privateLinkResourceId')]"
                   },
                   "groupId": "",
-                  "privateLinkLocation": "[parameters('location')]",
+                  "privateLinkLocation": "[parameters('privateLinkLocation')]",
                   "requestMessage": "Approve Azure Front Door Premium access to the Moodle private origin."
                 }
               },

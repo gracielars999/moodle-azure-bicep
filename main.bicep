@@ -29,24 +29,17 @@ param moodleDbName string = 'moodle'
 @description('Address space for the virtual network, e.g. 10.0.0.0/16.')
 param vnetAddressPrefix string = '10.0.0.0/16'
 
-@description('Address prefix for the frontend subnet (VMSS + ILB).')
+@description('Address prefix for the frontend subnet (VMSS + ILB + Private Link Service).')
 param subnetFrontendPrefix string = '10.0.1.0/24'
 
 @description('Address prefix for the control subnet (Controller VM).')
 param subnetControlPrefix string = '10.0.2.0/24'
 
-@description('Address prefix for the data subnet (private endpoints for MySQL, Redis, Storage).')
+@description('Address prefix for the data subnet (all private endpoints: MySQL, Redis, Storage, Key Vault).')
 param subnetDataPrefix string = '10.0.3.0/24'
-
-@description('Address prefix for the secrets subnet (Key Vault private endpoint).')
-#disable-next-line secure-secrets-in-params
-param subnetSecretsPrefix string = '10.0.4.0/24'
 
 @description('Address prefix for the Azure Bastion subnet. Must be /27 or larger.')
 param subnetBastionPrefix string = '10.0.5.0/27'
-
-@description('Address prefix for the Private Link service subnet (Front Door origin).')
-param subnetPrivateLinkPrefix string = '10.0.6.0/24'
 
 var tags = {
   environment: prefix
@@ -64,9 +57,7 @@ module network './modules/network.bicep' = {
     subnetFrontendPrefix: subnetFrontendPrefix
     subnetControlPrefix: subnetControlPrefix
     subnetDataPrefix: subnetDataPrefix
-    subnetSecretsPrefix: subnetSecretsPrefix
     subnetBastionPrefix: subnetBastionPrefix
-    subnetPrivateLinkPrefix: subnetPrivateLinkPrefix
   }
 }
 
@@ -120,7 +111,7 @@ module compute './modules/compute.bicep' = {
     adminPassword: adminPassword
     frontendSubnetId: network.outputs.subnetIds.frontend
     controlSubnetId: network.outputs.subnetIds.control
-    privatelinkSubnetId: network.outputs.subnetIds.privatelink
+    privatelinkSubnetId: network.outputs.subnetIds.frontend
     storageAccountName: storage.outputs.storageAccountName
     fileShareName: storage.outputs.fileShareName
     storageAccountKey: storage.outputs.primaryFileKey
@@ -140,7 +131,7 @@ module keyVault './modules/keyvault.bicep' = {
     location: location
     tags: tags
     vnetId: network.outputs.vnetId
-    secretsSubnetId: network.outputs.subnetIds.secrets
+    dataSubnetId: network.outputs.subnetIds.data
     vmssPrincipalId: compute.outputs.vmssPrincipalId
     controllerPrincipalId: compute.outputs.controllerPrincipalId
     mysqlPassword: mysqlAdminPassword
@@ -161,6 +152,7 @@ module frontDoor './modules/frontdoor.bicep' = {
     customDomain: customDomain
     privateLinkResourceId: compute.outputs.privateLinkServiceId
     originHostName: compute.outputs.loadBalancerPrivateIp
+    privateLinkLocation: location
   }
 }
 

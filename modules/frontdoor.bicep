@@ -16,6 +16,9 @@ param privateLinkResourceId string
 @description('Origin host header and hostname used by Front Door to reach the internal load balancer.')
 param originHostName string
 
+@description('Azure region where the Private Link Service is deployed. Required by Front Door to approve the private endpoint connection.')
+param privateLinkLocation string
+
 var profileName = '${prefix}-afd-profile'
 var endpointName = '${prefix}-afd-endpoint'
 var originGroupName = '${prefix}-origin-group'
@@ -103,7 +106,7 @@ resource origin 'Microsoft.Cdn/profiles/originGroups/origins@2023-05-01' = {
         id: privateLinkResourceId
       }
       groupId: ''
-      privateLinkLocation: location
+      privateLinkLocation: privateLinkLocation
       requestMessage: 'Approve Azure Front Door Premium access to the Moodle private origin.'
     }
   }

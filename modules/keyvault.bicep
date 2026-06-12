@@ -10,8 +10,8 @@ param tags object
 @description('Virtual network resource ID used for private DNS linking.')
 param vnetId string
 
-@description('Subnet resource ID used for the Key Vault private endpoint.')
-param secretsSubnetId string
+@description('Subnet resource ID used for the Key Vault private endpoint (data subnet).')
+param dataSubnetId string
 
 @description('Principal ID of the VM scale set system-assigned managed identity.')
 param vmssPrincipalId string
@@ -80,7 +80,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-01-01' = {
   tags: tags
   properties: {
     subnet: {
-      id: secretsSubnetId
+      id: dataSubnetId
     }
     privateLinkServiceConnections: [
       {
