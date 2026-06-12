@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "12254369228741184211"
+      "templateHash": "6475168021305113400"
     }
   },
   "parameters": {
@@ -860,7 +860,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "15350427664697632230"
+              "templateHash": "11286462298977529912"
             }
           },
           "parameters": {
@@ -930,7 +930,7 @@
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "sku": {
-                "name": "Balanced_B1",
+                "name": "Balanced_B0",
                 "capacity": 2
               },
               "properties": {

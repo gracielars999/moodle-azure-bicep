@@ -36,14 +36,13 @@ resource dnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-
   }
 }
 
-// Azure Managed Redis cluster (replaces the retired Azure Cache for Redis)
-// Balanced_B1 = 6 GB RAM, sufficient for 1000 users / 400 concurrent on Moodle
+// Balanced_B0 = 250 MB RAM, ~$30/month — sufficient for sessions and basic cache at 400 concurrent users
 resource redis 'Microsoft.Cache/redisEnterprise@2024-10-01' = {
   name: redisName
   location: location
   tags: tags
   sku: {
-    name: 'Balanced_B1'
+    name: 'Balanced_B0'
     capacity: 2
   }
   properties: {
