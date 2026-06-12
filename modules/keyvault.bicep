@@ -23,10 +23,6 @@ param controllerPrincipalId string
 @secure()
 param mysqlPassword string
 
-@description('Redis primary access key stored as a secret.')
-@secure()
-param redisKey string
-
 @description('Azure Files storage account key stored as a secret.')
 @secure()
 param storageKey string
@@ -116,14 +112,6 @@ resource mysqlPasswordSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   name: 'mysql-password'
   properties: {
     value: mysqlPassword
-  }
-}
-
-resource redisKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVault
-  name: 'redis-key'
-  properties: {
-    value: redisKey
   }
 }
 

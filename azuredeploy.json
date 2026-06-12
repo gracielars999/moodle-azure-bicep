@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "6475168021305113400"
+      "templateHash": "10323348455038584077"
     }
   },
   "parameters": {
@@ -86,14 +86,7 @@
       "type": "string",
       "defaultValue": "10.0.3.0/24",
       "metadata": {
-        "description": "Address prefix for the data subnet (all private endpoints: MySQL, Redis, Storage, Key Vault)."
-      }
-    },
-    "subnetBastionPrefix": {
-      "type": "string",
-      "defaultValue": "10.0.5.0/27",
-      "metadata": {
-        "description": "Address prefix for the Azure Bastion subnet. Must be /27 or larger."
+        "description": "Address prefix for the data subnet (all private endpoints: MySQL, Storage, Key Vault)."
       }
     }
   },
@@ -135,9 +128,6 @@
           },
           "subnetDataPrefix": {
             "value": "[parameters('subnetDataPrefix')]"
-          },
-          "subnetBastionPrefix": {
-            "value": "[parameters('subnetBastionPrefix')]"
           }
         },
         "template": {
@@ -147,7 +137,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "15111718159144036377"
+              "templateHash": "13074667560971383289"
             }
           },
           "parameters": {
@@ -194,14 +184,7 @@
               "type": "string",
               "defaultValue": "10.0.3.0/24",
               "metadata": {
-                "description": "Address prefix for the data subnet (all private endpoints: MySQL, Redis, Storage, Key Vault). Must be within vnetAddressPrefix."
-              }
-            },
-            "subnetBastionPrefix": {
-              "type": "string",
-              "defaultValue": "10.0.5.0/27",
-              "metadata": {
-                "description": "Address prefix for Azure Bastion subnet. Must be /27 or larger and within vnetAddressPrefix."
+                "description": "Address prefix for the data subnet (all private endpoints: MySQL, Storage, Key Vault). Must be within vnetAddressPrefix."
               }
             }
           },
@@ -252,7 +235,7 @@
                       "protocol": "Tcp",
                       "sourcePortRange": "*",
                       "destinationPortRange": "3389",
-                      "sourceAddressPrefix": "[parameters('subnetBastionPrefix')]",
+                      "sourceAddressPrefix": "VirtualNetwork",
                       "destinationAddressPrefix": "*"
                     }
                   },
@@ -302,7 +285,7 @@
                       "protocol": "Tcp",
                       "sourcePortRange": "*",
                       "destinationPortRange": "3389",
-                      "sourceAddressPrefix": "[parameters('subnetBastionPrefix')]",
+                      "sourceAddressPrefix": "VirtualNetwork",
                       "destinationAddressPrefix": "*"
                     }
                   },
@@ -341,143 +324,6 @@
                       "destinationPortRange": "*",
                       "sourceAddressPrefix": "Internet",
                       "destinationAddressPrefix": "*"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "type": "Microsoft.Network/networkSecurityGroups",
-              "apiVersion": "2024-01-01",
-              "name": "[format('{0}-bastion-nsg', parameters('prefix'))]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "properties": {
-                "securityRules": [
-                  {
-                    "name": "Allow-Internet-443-Inbound",
-                    "properties": {
-                      "priority": 100,
-                      "direction": "Inbound",
-                      "access": "Allow",
-                      "protocol": "Tcp",
-                      "sourcePortRange": "*",
-                      "destinationPortRange": "443",
-                      "sourceAddressPrefix": "Internet",
-                      "destinationAddressPrefix": "*"
-                    }
-                  },
-                  {
-                    "name": "Allow-GatewayManager-443-Inbound",
-                    "properties": {
-                      "priority": 110,
-                      "direction": "Inbound",
-                      "access": "Allow",
-                      "protocol": "Tcp",
-                      "sourcePortRange": "*",
-                      "destinationPortRange": "443",
-                      "sourceAddressPrefix": "GatewayManager",
-                      "destinationAddressPrefix": "*"
-                    }
-                  },
-                  {
-                    "name": "Allow-AzureLoadBalancer-443-Inbound",
-                    "properties": {
-                      "priority": 120,
-                      "direction": "Inbound",
-                      "access": "Allow",
-                      "protocol": "Tcp",
-                      "sourcePortRange": "*",
-                      "destinationPortRange": "443",
-                      "sourceAddressPrefix": "AzureLoadBalancer",
-                      "destinationAddressPrefix": "*"
-                    }
-                  },
-                  {
-                    "name": "Allow-VNet-8080-5701-Inbound",
-                    "properties": {
-                      "priority": 130,
-                      "direction": "Inbound",
-                      "access": "Allow",
-                      "protocol": "Tcp",
-                      "sourcePortRange": "*",
-                      "destinationPortRanges": [
-                        "8080",
-                        "5701"
-                      ],
-                      "sourceAddressPrefix": "VirtualNetwork",
-                      "destinationAddressPrefix": "*"
-                    }
-                  },
-                  {
-                    "name": "Deny-Internet-Inbound",
-                    "properties": {
-                      "priority": 4000,
-                      "direction": "Inbound",
-                      "access": "Deny",
-                      "protocol": "*",
-                      "sourcePortRange": "*",
-                      "destinationPortRange": "*",
-                      "sourceAddressPrefix": "Internet",
-                      "destinationAddressPrefix": "*"
-                    }
-                  },
-                  {
-                    "name": "Allow-VNet-22-3389-Outbound",
-                    "properties": {
-                      "priority": 100,
-                      "direction": "Outbound",
-                      "access": "Allow",
-                      "protocol": "Tcp",
-                      "sourcePortRange": "*",
-                      "destinationPortRanges": [
-                        "22",
-                        "3389"
-                      ],
-                      "sourceAddressPrefix": "*",
-                      "destinationAddressPrefix": "VirtualNetwork"
-                    }
-                  },
-                  {
-                    "name": "Allow-VNet-8080-5701-Outbound",
-                    "properties": {
-                      "priority": 110,
-                      "direction": "Outbound",
-                      "access": "Allow",
-                      "protocol": "Tcp",
-                      "sourcePortRange": "*",
-                      "destinationPortRanges": [
-                        "8080",
-                        "5701"
-                      ],
-                      "sourceAddressPrefix": "*",
-                      "destinationAddressPrefix": "VirtualNetwork"
-                    }
-                  },
-                  {
-                    "name": "Allow-AzureCloud-443-Outbound",
-                    "properties": {
-                      "priority": 120,
-                      "direction": "Outbound",
-                      "access": "Allow",
-                      "protocol": "Tcp",
-                      "sourcePortRange": "*",
-                      "destinationPortRange": "443",
-                      "sourceAddressPrefix": "*",
-                      "destinationAddressPrefix": "AzureCloud"
-                    }
-                  },
-                  {
-                    "name": "Allow-Internet-80-Outbound",
-                    "properties": {
-                      "priority": 130,
-                      "direction": "Outbound",
-                      "access": "Allow",
-                      "protocol": "Tcp",
-                      "sourcePortRange": "*",
-                      "destinationPortRange": "80",
-                      "sourceAddressPrefix": "*",
-                      "destinationAddressPrefix": "Internet"
                     }
                   }
                 ]
@@ -524,20 +370,10 @@
                         "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-data-nsg', parameters('prefix')))]"
                       }
                     }
-                  },
-                  {
-                    "name": "AzureBastionSubnet",
-                    "properties": {
-                      "addressPrefix": "[parameters('subnetBastionPrefix')]",
-                      "networkSecurityGroup": {
-                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-bastion-nsg', parameters('prefix')))]"
-                      }
-                    }
                   }
                 ]
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-bastion-nsg', parameters('prefix')))]",
                 "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-control-nsg', parameters('prefix')))]",
                 "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-data-nsg', parameters('prefix')))]",
                 "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-frontend-nsg', parameters('prefix')))]"
@@ -558,8 +394,7 @@
               "value": {
                 "frontend": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[0].id]",
                 "control": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[1].id]",
-                "data": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[2].id]",
-                "bastion": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[3].id]"
+                "data": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnetName')), '2024-01-01').subnets[2].id]"
               }
             }
           }
@@ -819,200 +654,6 @@
             "privateEndpointId": {
               "type": "string",
               "value": "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pep', variables('mysqlServerName')))]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'network')]"
-      ]
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "redis",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "prefix": {
-            "value": "[parameters('prefix')]"
-          },
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "tags": {
-            "value": "[variables('tags')]"
-          },
-          "vnetId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.vnetId.value]"
-          },
-          "dataSubnetId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.subnetIds.value.data]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "11286462298977529912"
-            }
-          },
-          "parameters": {
-            "prefix": {
-              "type": "string",
-              "metadata": {
-                "description": "Prefix used for naming Redis resources."
-              }
-            },
-            "location": {
-              "type": "string",
-              "metadata": {
-                "description": "Azure region for Redis resources."
-              }
-            },
-            "tags": {
-              "type": "object",
-              "metadata": {
-                "description": "Tags applied to all taggable resources in this module."
-              }
-            },
-            "vnetId": {
-              "type": "string",
-              "metadata": {
-                "description": "Virtual network resource ID used for private DNS linking."
-              }
-            },
-            "dataSubnetId": {
-              "type": "string",
-              "metadata": {
-                "description": "Subnet resource ID used for the Redis private endpoint."
-              }
-            }
-          },
-          "variables": {
-            "redisName": "[toLower(take(format('{0}-redis-{1}', parameters('prefix'), uniqueString(resourceGroup().id)), 40))]",
-            "privateDnsZoneName": "[format('privatelink.{0}.redisenterprise.cache.azure.net', parameters('location'))]"
-          },
-          "resources": [
-            {
-              "type": "Microsoft.Network/privateDnsZones",
-              "apiVersion": "2024-06-01",
-              "name": "[variables('privateDnsZoneName')]",
-              "location": "global",
-              "tags": "[parameters('tags')]"
-            },
-            {
-              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
-              "apiVersion": "2024-06-01",
-              "name": "[format('{0}/{1}', variables('privateDnsZoneName'), format('{0}-redis-link', parameters('prefix')))]",
-              "location": "global",
-              "tags": "[parameters('tags')]",
-              "properties": {
-                "registrationEnabled": false,
-                "virtualNetwork": {
-                  "id": "[parameters('vnetId')]"
-                }
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]"
-              ]
-            },
-            {
-              "type": "Microsoft.Cache/redisEnterprise",
-              "apiVersion": "2024-10-01",
-              "name": "[variables('redisName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "sku": {
-                "name": "Balanced_B0",
-                "capacity": 2
-              },
-              "properties": {
-                "minimumTlsVersion": "1.2"
-              }
-            },
-            {
-              "type": "Microsoft.Cache/redisEnterprise/databases",
-              "apiVersion": "2024-10-01",
-              "name": "[format('{0}/{1}', variables('redisName'), 'default')]",
-              "properties": {
-                "clientProtocol": "Encrypted",
-                "clusteringPolicy": "EnterpriseCluster",
-                "evictionPolicy": "VolatileLRU",
-                "port": 10000
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Cache/redisEnterprise', variables('redisName'))]"
-              ]
-            },
-            {
-              "type": "Microsoft.Network/privateEndpoints",
-              "apiVersion": "2024-01-01",
-              "name": "[format('{0}-pep', variables('redisName'))]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "properties": {
-                "subnet": {
-                  "id": "[parameters('dataSubnetId')]"
-                },
-                "privateLinkServiceConnections": [
-                  {
-                    "name": "[format('{0}-connection', variables('redisName'))]",
-                    "properties": {
-                      "privateLinkServiceId": "[resourceId('Microsoft.Cache/redisEnterprise', variables('redisName'))]",
-                      "groupIds": [
-                        "redisEnterprise"
-                      ]
-                    }
-                  }
-                ]
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Cache/redisEnterprise', variables('redisName'))]"
-              ]
-            },
-            {
-              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
-              "apiVersion": "2024-01-01",
-              "name": "[format('{0}/{1}', format('{0}-pep', variables('redisName')), 'default')]",
-              "properties": {
-                "privateDnsZoneConfigs": [
-                  {
-                    "name": "redis-zone",
-                    "properties": {
-                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]"
-                    }
-                  }
-                ]
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]",
-                "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pep', variables('redisName')))]"
-              ]
-            }
-          ],
-          "outputs": {
-            "redisId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.Cache/redisEnterprise', variables('redisName'))]"
-            },
-            "redisName": {
-              "type": "string",
-              "value": "[variables('redisName')]"
-            },
-            "primaryKey": {
-              "type": "string",
-              "value": "[listKeys(resourceId('Microsoft.Cache/redisEnterprise/databases', variables('redisName'), 'default'), '2024-10-01').primaryKey]"
-            },
-            "hostname": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.Cache/redisEnterprise', variables('redisName')), '2024-10-01').hostName]"
             }
           }
         }
@@ -1296,7 +937,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "9498902921871881652"
+              "templateHash": "1890299097956145912"
             }
           },
           "parameters": {
@@ -1518,7 +1159,7 @@
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "sku": {
-                "name": "Standard_D4s_v5",
+                "name": "Standard_D2s_v5",
                 "tier": "Standard",
                 "capacity": 2
               },
@@ -1822,9 +1463,6 @@
           "mysqlPassword": {
             "value": "[parameters('mysqlAdminPassword')]"
           },
-          "redisKey": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'redis'), '2025-04-01').outputs.primaryKey.value]"
-          },
           "storageKey": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.primaryFileKey.value]"
           }
@@ -1836,7 +1474,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "1402556462001818606"
+              "templateHash": "2704603420273431813"
             }
           },
           "parameters": {
@@ -1886,12 +1524,6 @@
               "type": "securestring",
               "metadata": {
                 "description": "MySQL administrator password stored as a secret."
-              }
-            },
-            "redisKey": {
-              "type": "securestring",
-              "metadata": {
-                "description": "Redis primary access key stored as a secret."
               }
             },
             "storageKey": {
@@ -2010,17 +1642,6 @@
             {
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2023-07-01",
-              "name": "[format('{0}/{1}', variables('keyVaultName'), 'redis-key')]",
-              "properties": {
-                "value": "[parameters('redisKey')]"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]"
-              ]
-            },
-            {
-              "type": "Microsoft.KeyVault/vaults/secrets",
-              "apiVersion": "2023-07-01",
               "name": "[format('{0}/{1}', variables('keyVaultName'), 'storage-key')]",
               "properties": {
                 "value": "[parameters('storageKey')]"
@@ -2074,7 +1695,6 @@
         "[resourceId('Microsoft.Resources/deployments', 'compute')]",
         "[resourceId('Microsoft.Resources/deployments', 'mysql')]",
         "[resourceId('Microsoft.Resources/deployments', 'network')]",
-        "[resourceId('Microsoft.Resources/deployments', 'redis')]",
         "[resourceId('Microsoft.Resources/deployments', 'storage')]"
       ]
     },
@@ -2384,8 +2004,8 @@
           "tags": {
             "value": "[variables('tags')]"
           },
-          "bastionSubnetId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.subnetIds.value.bastion]"
+          "vnetId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.vnetId.value]"
           }
         },
         "template": {
@@ -2395,7 +2015,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "13557658160715808674"
+              "templateHash": "16286335983503127218"
             }
           },
           "parameters": {
@@ -2417,27 +2037,14 @@
                 "description": "Tags applied to all taggable resources in this module."
               }
             },
-            "bastionSubnetId": {
+            "vnetId": {
               "type": "string",
               "metadata": {
-                "description": "Subnet resource ID of AzureBastionSubnet."
+                "description": "Virtual network resource ID. Developer SKU attaches to the VNet directly — no dedicated subnet needed."
               }
             }
           },
           "resources": [
-            {
-              "type": "Microsoft.Network/publicIPAddresses",
-              "apiVersion": "2024-01-01",
-              "name": "[format('{0}-bastion-pip', parameters('prefix'))]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "sku": {
-                "name": "Standard"
-              },
-              "properties": {
-                "publicIPAllocationMethod": "Static"
-              }
-            },
             {
               "type": "Microsoft.Network/bastionHosts",
               "apiVersion": "2024-01-01",
@@ -2445,26 +2052,13 @@
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "sku": {
-                "name": "Basic"
+                "name": "Developer"
               },
               "properties": {
-                "ipConfigurations": [
-                  {
-                    "name": "bastion-ipconfig",
-                    "properties": {
-                      "publicIPAddress": {
-                        "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-bastion-pip', parameters('prefix')))]"
-                      },
-                      "subnet": {
-                        "id": "[parameters('bastionSubnetId')]"
-                      }
-                    }
-                  }
-                ]
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-bastion-pip', parameters('prefix')))]"
-              ]
+                "virtualNetwork": {
+                  "id": "[parameters('vnetId')]"
+                }
+              }
             }
           ],
           "outputs": {

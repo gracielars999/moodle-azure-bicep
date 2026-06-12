@@ -174,7 +174,8 @@ resource vmss 'Microsoft.Compute/virtualMachineScaleSets@2024-03-01' = {
   location: location
   tags: tags
   sku: {
-    name: 'Standard_D4s_v5'
+    // D2s_v5: 2 vCPU / 8 GB RAM — sufficient for ~200 concurrent users per node
+    name: 'Standard_D2s_v5'
     tier: 'Standard'
     capacity: 2
   }

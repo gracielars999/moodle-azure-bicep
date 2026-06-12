@@ -35,11 +35,8 @@ param subnetFrontendPrefix string = '10.0.1.0/24'
 @description('Address prefix for the control subnet (Controller VM).')
 param subnetControlPrefix string = '10.0.2.0/24'
 
-@description('Address prefix for the data subnet (all private endpoints: MySQL, Redis, Storage, Key Vault).')
+@description('Address prefix for the data subnet (all private endpoints: MySQL, Storage, Key Vault).')
 param subnetDataPrefix string = '10.0.3.0/24'
-
-@description('Address prefix for the Azure Bastion subnet. Must be /27 or larger.')
-param subnetBastionPrefix string = '10.0.5.0/27'
 
 var tags = {
   environment: prefix
@@ -57,7 +54,6 @@ module network './modules/network.bicep' = {
     subnetFrontendPrefix: subnetFrontendPrefix
     subnetControlPrefix: subnetControlPrefix
     subnetDataPrefix: subnetDataPrefix
-    subnetBastionPrefix: subnetBastionPrefix
   }
 }
 
@@ -72,17 +68,6 @@ module mysql './modules/mysql.bicep' = {
     adminUsername: mysqlAdminUsername
     adminPassword: mysqlAdminPassword
     databaseName: moodleDbName
-  }
-}
-
-module redis './modules/redis.bicep' = {
-  name: 'redis'
-  params: {
-    prefix: prefix
-    location: location
-    tags: tags
-    vnetId: network.outputs.vnetId
-    dataSubnetId: network.outputs.subnetIds.data
   }
 }
 
@@ -123,7 +108,6 @@ module keyVault './modules/keyvault.bicep' = {
   dependsOn: [
     compute
     mysql
-    redis
     storage
   ]
   params: {
@@ -135,7 +119,6 @@ module keyVault './modules/keyvault.bicep' = {
     vmssPrincipalId: compute.outputs.vmssPrincipalId
     controllerPrincipalId: compute.outputs.controllerPrincipalId
     mysqlPassword: mysqlAdminPassword
-    redisKey: redis.outputs.primaryKey
     storageKey: storage.outputs.primaryFileKey
   }
 }
@@ -158,14 +141,11 @@ module frontDoor './modules/frontdoor.bicep' = {
 
 module bastion './modules/bastion.bicep' = {
   name: 'bastion'
-  dependsOn: [
-    network
-  ]
   params: {
     prefix: prefix
     location: location
     tags: tags
-    bastionSubnetId: network.outputs.subnetIds.bastion
+    vnetId: network.outputs.vnetId
   }
 }
 

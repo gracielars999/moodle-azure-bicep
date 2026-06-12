@@ -7,42 +7,23 @@ param location string
 @description('Tags applied to all taggable resources in this module.')
 param tags object
 
-@description('Subnet resource ID of AzureBastionSubnet.')
-param bastionSubnetId string
+@description('Virtual network resource ID. Developer SKU attaches to the VNet directly — no dedicated subnet needed.')
+param vnetId string
 
-resource publicIp 'Microsoft.Network/publicIPAddresses@2024-01-01' = {
-  name: '${prefix}-bastion-pip'
-  location: location
-  tags: tags
-  sku: {
-    name: 'Standard'
-  }
-  properties: {
-    publicIPAllocationMethod: 'Static'
-  }
-}
-
+// Developer SKU = free tier (no hourly charge).
+// Limitations vs Basic/Standard: single concurrent session, no custom ports, no IP-based connect.
+// No public IP or AzureBastionSubnet required.
 resource bastion 'Microsoft.Network/bastionHosts@2024-01-01' = {
   name: '${prefix}-bastion'
   location: location
   tags: tags
   sku: {
-    name: 'Basic'
+    name: 'Developer'
   }
   properties: {
-    ipConfigurations: [
-      {
-        name: 'bastion-ipconfig'
-        properties: {
-          publicIPAddress: {
-            id: publicIp.id
-          }
-          subnet: {
-            id: bastionSubnetId
-          }
-        }
-      }
-    ]
+    virtualNetwork: {
+      id: vnetId
+    }
   }
 }
 
