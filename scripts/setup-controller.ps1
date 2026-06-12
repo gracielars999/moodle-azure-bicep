@@ -1,3 +1,13 @@
+param(
+    [string]$StorageAccount = $env:MOODLE_STORAGE_ACCOUNT,
+    [string]$FileShare      = $env:MOODLE_FILE_SHARE,
+    [string]$StorageKey     = $env:MOODLE_STORAGE_KEY
+)
+# Normalize: ensure env vars are set for any code that reads them directly
+$env:MOODLE_STORAGE_ACCOUNT = $StorageAccount
+$env:MOODLE_FILE_SHARE      = $FileShare
+$env:MOODLE_STORAGE_KEY     = $StorageKey
+
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 

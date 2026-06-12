@@ -43,10 +43,13 @@ var privateLinkNatIp = '10.0.1.20'
 var loadBalancerFrontendId = resourceId('Microsoft.Network/loadBalancers/frontendIPConfigurations', loadBalancerName, 'frontend')
 var loadBalancerBackendPoolId = resourceId('Microsoft.Network/loadBalancers/backendAddressPools', loadBalancerName, 'backendpool')
 var loadBalancerProbeId = resourceId('Microsoft.Network/loadBalancers/probes', loadBalancerName, 'http-probe')
-var nodeScriptBase64 = base64(loadTextContent('../scripts/setup-moodle-node.ps1'))
-var controllerScriptBase64 = base64(loadTextContent('../scripts/setup-controller.ps1'))
-var vmssCommand = 'powershell -ExecutionPolicy Bypass -Command "$env:MOODLE_STORAGE_ACCOUNT=`"${storageAccountName}`"; $env:MOODLE_FILE_SHARE=`"${fileShareName}`"; $env:MOODLE_STORAGE_KEY=`"${storageAccountKey}`"; $script=[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(`"${nodeScriptBase64}`")); Invoke-Expression $script"'
-var controllerCommand = 'powershell -ExecutionPolicy Bypass -Command "$env:MOODLE_STORAGE_ACCOUNT=`"${storageAccountName}`"; $env:MOODLE_FILE_SHARE=`"${fileShareName}`"; $env:MOODLE_STORAGE_KEY=`"${storageAccountKey}`"; $script=[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(`"${controllerScriptBase64}`")); Invoke-Expression $script"'
+
+// Scripts are downloaded by CSE from the public GitHub repo (fileUris).
+// commandToExecute is short (~300 chars) — no command-line-too-long error.
+// commandToExecute lives in protectedSettings so the storage key is encrypted.
+var scriptBaseUrl = 'https://raw.githubusercontent.com/gracielars999/moodle-azure-bicep/main/scripts/'
+var nodeRunCmd = 'powershell -ExecutionPolicy Bypass -File setup-moodle-node.ps1 -StorageAccount ${storageAccountName} -FileShare ${fileShareName} -StorageKey ${storageAccountKey}'
+var controllerRunCmd = 'powershell -ExecutionPolicy Bypass -File setup-controller.ps1 -StorageAccount ${storageAccountName} -FileShare ${fileShareName} -StorageKey ${storageAccountKey}'
 
 resource loadBalancer 'Microsoft.Network/loadBalancers@2024-01-01' = {
   name: loadBalancerName
@@ -252,8 +255,11 @@ resource vmssExtension 'Microsoft.Compute/virtualMachineScaleSets/extensions@202
     type: 'CustomScriptExtension'
     typeHandlerVersion: '1.10'
     autoUpgradeMinorVersion: true
+    settings: {
+      fileUris: ['${scriptBaseUrl}setup-moodle-node.ps1']
+    }
     protectedSettings: {
-      commandToExecute: vmssCommand
+      commandToExecute: nodeRunCmd
     }
   }
 }
@@ -391,8 +397,11 @@ resource controllerExtension 'Microsoft.Compute/virtualMachines/extensions@2024-
     type: 'CustomScriptExtension'
     typeHandlerVersion: '1.10'
     autoUpgradeMinorVersion: true
+    settings: {
+      fileUris: ['${scriptBaseUrl}setup-controller.ps1']
+    }
     protectedSettings: {
-      commandToExecute: controllerCommand
+      commandToExecute: controllerRunCmd
     }
   }
 }
