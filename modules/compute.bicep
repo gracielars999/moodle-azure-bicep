@@ -250,6 +250,7 @@ resource vmss 'Microsoft.Compute/virtualMachineScaleSets@2024-03-01' = {
 resource vmssExtension 'Microsoft.Compute/virtualMachineScaleSets/extensions@2024-03-01' = {
   parent: vmss
   name: 'setupmoodlenode'
+  location: location
   properties: {
     publisher: 'Microsoft.Compute'
     type: 'CustomScriptExtension'
@@ -392,6 +393,7 @@ resource controllerVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
 resource controllerExtension 'Microsoft.Compute/virtualMachines/extensions@2024-03-01' = {
   parent: controllerVm
   name: 'setupcontroller'
+  location: location
   properties: {
     publisher: 'Microsoft.Compute'
     type: 'CustomScriptExtension'

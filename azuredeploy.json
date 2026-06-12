@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "3818999911147014225"
+      "templateHash": "14173441829285150606"
     }
   },
   "parameters": {
@@ -937,7 +937,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "4331591556573411166"
+              "templateHash": "2959222985157808307"
             }
           },
           "parameters": {
@@ -1228,6 +1228,7 @@
               "type": "Microsoft.Compute/virtualMachineScaleSets/extensions",
               "apiVersion": "2024-03-01",
               "name": "[format('{0}/{1}', variables('vmssName'), 'setupmoodlenode')]",
+              "location": "[parameters('location')]",
               "properties": {
                 "publisher": "Microsoft.Compute",
                 "type": "CustomScriptExtension",
@@ -1384,6 +1385,7 @@
               "type": "Microsoft.Compute/virtualMachines/extensions",
               "apiVersion": "2024-03-01",
               "name": "[format('{0}/{1}', variables('controllerVmName'), 'setupcontroller')]",
+              "location": "[parameters('location')]",
               "properties": {
                 "publisher": "Microsoft.Compute",
                 "type": "CustomScriptExtension",
@@ -1727,6 +1729,9 @@
           "customDomain": {
             "value": "[parameters('customDomain')]"
           },
+          "regionalLocation": {
+            "value": "[parameters('location')]"
+          },
           "privateLinkResourceId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'compute'), '2025-04-01').outputs.privateLinkServiceId.value]"
           },
@@ -1744,7 +1749,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "7399026957533978502"
+              "templateHash": "14579449364902624715"
             }
           },
           "parameters": {
@@ -1758,7 +1763,7 @@
               "type": "string",
               "defaultValue": "global",
               "metadata": {
-                "description": "Location for Front Door resources. Use global for Azure Front Door."
+                "description": "Location for Front Door global resources (profile, endpoint, origin group). Must be global."
               }
             },
             "tags": {
@@ -1783,6 +1788,12 @@
               "type": "string",
               "metadata": {
                 "description": "Origin host header and hostname used by Front Door to reach the internal load balancer."
+              }
+            },
+            "regionalLocation": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for regional resources (WAF policy). Must be a real region, not global."
               }
             },
             "privateLinkLocation": {
@@ -1827,8 +1838,8 @@
             {
               "type": "Microsoft.Network/FrontDoorWebApplicationFirewallPolicies",
               "apiVersion": "2022-05-01",
-              "name": "[format('{0}-afd-waf', parameters('prefix'))]",
-              "location": "[parameters('location')]",
+              "name": "[format('{0}afdwaf', parameters('prefix'))]",
+              "location": "[parameters('regionalLocation')]",
               "tags": "[parameters('tags')]",
               "sku": {
                 "name": "Premium_AzureFrontDoor"
@@ -1953,7 +1964,7 @@
                 "parameters": {
                   "type": "WebApplicationFirewall",
                   "wafPolicy": {
-                    "id": "[resourceId('Microsoft.Network/FrontDoorWebApplicationFirewallPolicies', format('{0}-afd-waf', parameters('prefix')))]"
+                    "id": "[resourceId('Microsoft.Network/FrontDoorWebApplicationFirewallPolicies', format('{0}afdwaf', parameters('prefix')))]"
                   },
                   "associations": [
                     {
@@ -1972,7 +1983,7 @@
               "dependsOn": [
                 "[resourceId('Microsoft.Cdn/profiles/afdEndpoints', variables('profileName'), variables('endpointName'))]",
                 "[resourceId('Microsoft.Cdn/profiles', variables('profileName'))]",
-                "[resourceId('Microsoft.Network/FrontDoorWebApplicationFirewallPolicies', format('{0}-afd-waf', parameters('prefix')))]"
+                "[resourceId('Microsoft.Network/FrontDoorWebApplicationFirewallPolicies', format('{0}afdwaf', parameters('prefix')))]"
               ]
             }
           ],

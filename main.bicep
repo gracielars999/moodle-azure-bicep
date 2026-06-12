@@ -133,6 +133,7 @@ module frontDoor './modules/frontdoor.bicep' = {
     location: 'global'
     tags: tags
     customDomain: customDomain
+    regionalLocation: location
     privateLinkResourceId: compute.outputs.privateLinkServiceId
     originHostName: compute.outputs.loadBalancerPrivateIp
     privateLinkLocation: location

@@ -1,7 +1,7 @@
 @description('Prefix used for naming Front Door resources.')
 param prefix string
 
-@description('Location for Front Door resources. Use global for Azure Front Door.')
+@description('Location for Front Door global resources (profile, endpoint, origin group). Must be global.')
 param location string = 'global'
 
 @description('Tags applied to all taggable resources in this module.')
@@ -15,6 +15,9 @@ param privateLinkResourceId string
 
 @description('Origin host header and hostname used by Front Door to reach the internal load balancer.')
 param originHostName string
+
+@description('Azure region for regional resources (WAF policy). Must be a real region, not global.')
+param regionalLocation string
 
 @description('Azure region where the Private Link Service is deployed. Required by Front Door to approve the private endpoint connection.')
 param privateLinkLocation string
@@ -46,8 +49,8 @@ resource endpoint 'Microsoft.Cdn/profiles/afdEndpoints@2023-05-01' = {
 }
 
 resource wafPolicy 'Microsoft.Network/FrontDoorWebApplicationFirewallPolicies@2022-05-01' = {
-  name: '${prefix}-afd-waf'
-  location: location
+  name: '${prefix}afdwaf'  // no hyphens — WAF policy names must be alphanumeric only
+  location: regionalLocation  // WAF policy requires a real region, not 'global'
   tags: tags
   sku: {
     name: 'Premium_AzureFrontDoor'
